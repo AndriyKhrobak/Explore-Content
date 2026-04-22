@@ -308,89 +308,25 @@ function scoreColor(score: number) {
         Помилка OAuth: {{ oauthError }}
       </div>
 
-      <!-- Step 1: YouTube -->
-      <section
-        v-if="!youtube.connected"
-        class="rounded-2xl border border-line bg-bg-panel/60 p-6"
+      <!-- Step 1: Platforms -->
+      <div class="space-y-3">
+        <PlatformCard
+          platform="youtube"
+          :connected="youtube.connected"
+          :channel-title="youtube.channelTitle"
+          :channel-url="youtube.channelId ? `https://www.youtube.com/channel/${youtube.channelId}` : null"
+          :connect-href="`/api/youtube/connect?projectId=${project!.id}`"
+          :disabled="disconnecting"
+          @disconnect="onDisconnect"
+        />
+        <PlatformCard platform="tiktok" :connected="false" coming-soon />
+      </div>
+      <p
+        v-if="disconnectError"
+        class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"
       >
-        <h2 class="text-base font-semibold text-white">Крок 1: Підключіть YouTube Shorts</h2>
-        <p class="mt-2 text-sm text-neutral-400">
-          Авторизуйте доступ до вашого YouTube-каналу, щоб сервіс міг
-          публікувати Shorts автоматично.
-        </p>
-        <a
-          :href="`/api/youtube/connect?projectId=${project!.id}`"
-          class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/30 transition hover:bg-accent-glow"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path
-              d="M23.498 6.186a3.008 3.008 0 0 0-2.117-2.13C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.381.557A3.008 3.008 0 0 0 .502 6.186C0 8.071 0 12 0 12s0 3.929.502 5.814a3.008 3.008 0 0 0 2.117 2.13C4.495 20.5 12 20.5 12 20.5s7.505 0 9.381-.557a3.008 3.008 0 0 0 2.117-2.13C24 15.929 24 12 24 12s0-3.929-.502-5.814zM9.75 15.568V8.432L15.818 12 9.75 15.568z"
-            />
-          </svg>
-          Підключити YouTube Shorts
-        </a>
-      </section>
-
-      <section v-else class="rounded-2xl border border-line bg-bg-panel/60 p-6">
-        <div class="flex items-center gap-4">
-          <div
-            class="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-line bg-bg-elevated"
-          >
-            <img
-              v-if="youtube.channelThumbnailUrl"
-              :src="youtube.channelThumbnailUrl"
-              :alt="youtube.channelTitle || 'YouTube channel'"
-              class="h-full w-full object-cover"
-              referrerpolicy="no-referrer"
-            />
-            <div
-              v-else
-              class="flex h-full w-full items-center justify-center text-neutral-500"
-              aria-hidden
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M23.498 6.186a3.008 3.008 0 0 0-2.117-2.13C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.381.557A3.008 3.008 0 0 0 .502 6.186C0 8.071 0 12 0 12s0 3.929.502 5.814a3.008 3.008 0 0 0 2.117 2.13C4.495 20.5 12 20.5 12 20.5s7.505 0 9.381-.557a3.008 3.008 0 0 0 2.117-2.13C24 15.929 24 12 24 12s0-3.929-.502-5.814zM9.75 15.568V8.432L15.818 12 9.75 15.568z"
-                />
-              </svg>
-            </div>
-          </div>
-
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-base font-semibold text-white">
-              {{ youtube.channelTitle || 'YouTube-канал' }}
-            </h2>
-            <p class="mt-0.5 flex items-center gap-2 text-xs text-neutral-400">
-              <span class="inline-flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden />
-              Підключено
-              <a
-                v-if="youtube.channelId"
-                :href="`https://www.youtube.com/channel/${youtube.channelId}`"
-                target="_blank"
-                rel="noreferrer"
-                class="text-neutral-500 hover:text-neutral-300"
-              >
-                відкрити →
-              </a>
-            </p>
-          </div>
-
-          <button
-            type="button"
-            :disabled="disconnecting"
-            class="shrink-0 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-medium text-neutral-300 transition hover:border-red-900/50 hover:bg-red-950/30 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-            @click="onDisconnect"
-          >
-            {{ disconnecting ? '…' : 'Відключити' }}
-          </button>
-        </div>
-        <p
-          v-if="disconnectError"
-          class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"
-        >
-          {{ disconnectError }}
-        </p>
-      </section>
+        {{ disconnectError }}
+      </p>
 
       <!-- Step 2: Generate clips -->
       <section v-if="youtube.connected" class="mt-6 rounded-2xl border border-line bg-bg-panel/60 p-6">
