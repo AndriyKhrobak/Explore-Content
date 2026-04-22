@@ -11,9 +11,10 @@ export type VizardClip = {
 };
 
 type CreateResponse = {
-  code: number;
-  data?: { projectId: string };
+  code?: number;
+  data?: unknown;
   message?: string;
+  projectId?: string | number;
 };
 
 type QueryResponse = {
@@ -82,6 +83,46 @@ export function detectVideoType(url: string): number {
   }
 }
 
+/**
+ * Vizard does not accept YouTube playlist URLs. Strips extraneous params
+ * like `&list=...&index=...&t=...` and returns a canonical watch URL.
+ */
+export function normalizeVideoUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host.includes('youtube.com') && u.pathname === '/watch') {
+      const v = u.searchParams.get('v');
+      if (v) return `https://www.youtube.com/watch?v=${v}`;
+    }
+    if (host === 'youtu.be') {
+      const videoId = u.pathname.slice(1).split('/')[0];
+      if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+function extractProjectId(res: CreateResponse): string | undefined {
+  if (!res) return undefined;
+  // Shape 1: { data: { projectId } }
+  if (typeof res.data === 'object' && res.data !== null) {
+    const d = res.data as Record<string, unknown>;
+    if (d.projectId !== undefined) return String(d.projectId);
+    if (d.project_id !== undefined) return String(d.project_id);
+    if (d.id !== undefined) return String(d.id);
+  }
+  // Shape 2: data is directly the ID (string or number)
+  if (typeof res.data === 'string' || typeof res.data === 'number') {
+    return String(res.data);
+  }
+  // Shape 3: top-level projectId
+  if (res.projectId !== undefined) return String(res.projectId);
+  return undefined;
+}
+
 export async function vizardCreateProject(input: {
   videoUrl: string;
   maxClips: number;
@@ -90,26 +131,41 @@ export async function vizardCreateProject(input: {
   const key = apiKey();
   if (!key) throw new Error('VIZARD_API_KEY not configured');
 
-  const videoType = detectVideoType(input.videoUrl);
+  const normalizedUrl = normalizeVideoUrl(input.videoUrl);
+  const videoType = detectVideoType(normalizedUrl);
 
-  const res = await $fetch<CreateResponse>(`${VIZARD_BASE}/project/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', VIZARDAI_API_KEY: key },
-    body: {
-      lang: input.lang ?? 'en',
-      preferLength: [1, 2],
-      videoUrl: input.videoUrl,
-      videoType,
-      subtitleSwitch: 1,
-      headlineSwitch: 1,
-      maxClipNumber: input.maxClips,
-    },
-  });
+  const body = {
+    lang: input.lang ?? 'en',
+    preferLength: [1, 2],
+    videoUrl: normalizedUrl,
+    videoType,
+    subtitleSwitch: 1,
+    headlineSwitch: 1,
+    maxClipNumber: input.maxClips,
+  };
 
-  if (!res.data?.projectId) {
-    throw new Error(res.message || `Vizard create failed (code ${res.code})`);
+  let res: CreateResponse;
+  try {
+    res = await $fetch<CreateResponse>(`${VIZARD_BASE}/project/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', VIZARDAI_API_KEY: key },
+      body,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[vizard.create] HTTP error:', message);
+    throw new Error(`Vizard HTTP error: ${message}`);
   }
-  return { projectId: res.data.projectId };
+
+  console.log('[vizard.create] request body:', JSON.stringify(body));
+  console.log('[vizard.create] response:', JSON.stringify(res));
+
+  const projectId = extractProjectId(res);
+  if (!projectId) {
+    const detail = JSON.stringify({ code: res.code, message: res.message, data: res.data });
+    throw new Error(`Vizard create succeeded but no projectId in response: ${detail}`);
+  }
+  return { projectId };
 }
 
 export async function vizardGetProject(
