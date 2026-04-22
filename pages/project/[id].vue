@@ -138,9 +138,13 @@ function closePreview() {
 }
 
 // === Polling while processing + elapsed timer ===
+// /api/clip/status triggers a fresh fetch from Vizard and updates the DB.
+// /api/projects/[id] only reads DB — calling it alone would never flip a
+// job from 'processing' to 'ready' unless clip/status was called first.
 let pollHandle: ReturnType<typeof setInterval> | null = null;
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 const now = ref(Date.now());
+const syncing = ref(false);
 
 const elapsedLabel = computed(() => {
   const job = latestJob.value;
@@ -152,6 +156,23 @@ const elapsedLabel = computed(() => {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 });
 
+async function syncStatus() {
+  const job = latestJob.value;
+  if (!job || job.status !== 'processing') return;
+  if (syncing.value) return;
+  syncing.value = true;
+  try {
+    await $fetch('/api/clip/status', {
+      params: { projectId: projectId.value, id: job.id },
+    });
+    await refresh();
+  } catch {
+    // Silently continue — next tick will retry.
+  } finally {
+    syncing.value = false;
+  }
+}
+
 watchEffect(() => {
   if (pollHandle) {
     clearInterval(pollHandle);
@@ -162,8 +183,11 @@ watchEffect(() => {
     tickHandle = null;
   }
   if (latestJob.value?.status === 'processing') {
+    // Kick an immediate sync on mount/reload — important for users who come
+    // back after closing the tab. The DB might be stale even if Vizard finished.
+    void syncStatus();
     pollHandle = setInterval(() => {
-      void refresh();
+      void syncStatus();
     }, 10000);
     tickHandle = setInterval(() => {
       now.value = Date.now();
@@ -418,14 +442,24 @@ function scoreColor(score: number) {
               <span class="ml-1 font-mono text-neutral-300">{{ elapsedLabel }}</span>
             </span>
           </div>
-          <a
-            :href="`https://vizard.ai/dashboard`"
-            target="_blank"
-            rel="noreferrer"
-            class="text-xs text-neutral-500 hover:text-neutral-300"
-          >
-            Vizard Dashboard ↗
-          </a>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              :disabled="syncing"
+              class="rounded-md border border-line bg-bg-elevated px-3 py-1 text-xs text-neutral-300 transition hover:border-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              @click="syncStatus"
+            >
+              {{ syncing ? 'Перевіряємо…' : 'Перевірити зараз' }}
+            </button>
+            <a
+              href="https://vizard.ai/dashboard"
+              target="_blank"
+              rel="noreferrer"
+              class="text-xs text-neutral-500 hover:text-neutral-300"
+            >
+              Dashboard ↗
+            </a>
+          </div>
         </div>
         <p class="mt-3 text-xs text-neutral-500">
           Коротке відео (~5 хв) обробляється 2–4 хвилини. Година відео — до
