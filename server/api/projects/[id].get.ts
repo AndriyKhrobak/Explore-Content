@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
     include: {
       youtube: true,
       jobs: { orderBy: { createdAt: 'asc' } },
-      uploads: { orderBy: { createdAt: 'asc' } },
+      uploads: { orderBy: { createdAt: 'desc' } },
     },
   });
 
