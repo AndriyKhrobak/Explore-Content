@@ -32,5 +32,18 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: process.env.VERCEL ? 'vercel' : undefined,
+    // Workaround: Nitro's node-file-trace strips vue/index.mjs when copying
+    // deps to the Vercel function bundle, crashing every request with
+    // ERR_MODULE_NOT_FOUND. Inlining Vue bundles it into the function itself.
+    externals: {
+      inline: [
+        'vue',
+        '@vue/runtime-core',
+        '@vue/runtime-dom',
+        '@vue/server-renderer',
+        '@vue/shared',
+        '@vue/reactivity',
+      ],
+    },
   },
 });
