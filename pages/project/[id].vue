@@ -586,6 +586,16 @@ function scoreColor(score: number) {
             }}
           </button>
         </div>
+
+        <p
+          v-if="youtube.channelId === 'demo-channel-id'"
+          class="mt-4 rounded-lg border border-yellow-900/50 bg-yellow-950/30 px-4 py-3 text-xs text-yellow-300"
+        >
+          Demo YouTube-підключення: кліпи позначаються як завантажені у БД,
+          але на справжній канал не летять. Додайте GOOGLE_CLIENT_ID та
+          GOOGLE_CLIENT_SECRET у Vercel env vars щоб увімкнути реальний upload.
+        </p>
+
         <p
           v-if="uploadError"
           class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"

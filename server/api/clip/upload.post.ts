@@ -1,5 +1,7 @@
 import type { VizardClip } from '~/server/utils/vizard';
 
+export const maxDuration = 60;
+
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
     projectId?: string;
@@ -43,7 +45,13 @@ export default defineEventHandler(async (event) => {
     ok: boolean;
     youtubeUrl?: string;
     error?: string;
+    demo?: boolean;
   }> = [];
+
+  const isDemoConnection = project.youtube.accessToken === 'demo-access-token';
+  const shouldSimulate = job.mock || isDemoConnection;
+
+  console.log('[clip.upload] job:', jobId, 'clips:', selected.length, 'mode:', shouldSimulate ? 'SIMULATE' : 'REAL');
 
   for (const clip of selected) {
     const upload = await prisma.upload.create({
@@ -55,21 +63,27 @@ export default defineEventHandler(async (event) => {
       },
     });
 
-    if (job.mock) {
-      const mockUrl = `https://youtu.be/mock-${clip.clipId}`;
+    if (shouldSimulate) {
+      const simulatedUrl = `https://youtu.be/demo-${clip.clipId}`;
       await prisma.upload.update({
         where: { id: upload.id },
         data: {
           status: 'completed',
-          youtubeVideoId: `mock-${clip.clipId}`,
-          youtubeUrl: mockUrl,
+          youtubeVideoId: `demo-${clip.clipId}`,
+          youtubeUrl: simulatedUrl,
         },
       });
-      results.push({ clipId: clip.clipId, ok: true, youtubeUrl: mockUrl });
+      results.push({
+        clipId: clip.clipId,
+        ok: true,
+        youtubeUrl: simulatedUrl,
+        demo: true,
+      });
       continue;
     }
 
     try {
+      console.log('[clip.upload] real upload:', clip.clipId, clip.videoUrl);
       const { videoId, url } = await uploadVideoToYouTube({
         connection: project.youtube,
         clipUrl: clip.videoUrl,
@@ -84,6 +98,7 @@ export default defineEventHandler(async (event) => {
       results.push({ clipId: clip.clipId, ok: true, youtubeUrl: url });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
+      console.error('[clip.upload] real upload failed:', clip.clipId, message);
       await prisma.upload.update({
         where: { id: upload.id },
         data: { status: 'failed', error: message },
