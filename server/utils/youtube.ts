@@ -138,6 +138,18 @@ async function fetchChannelInfo(
   }
 }
 
+/**
+ * Ensure a string contains "#Shorts" — required for YouTube to classify
+ * the video as a Short. Case-insensitive check; we add canonical "#Shorts"
+ * when missing. Title stays within 100 chars; tag is prepended to description
+ * but appended to title (to preserve readability of AI-generated headline).
+ */
+function ensureShortsTag(text: string): string {
+  if (/#shorts\b/i.test(text)) return text;
+  if (text.length <= 92) return `${text} #Shorts`;
+  return `#Shorts ${text}`;
+}
+
 export async function revokeToken(token: string): Promise<void> {
   try {
     await $fetch('https://oauth2.googleapis.com/revoke', {
@@ -178,17 +190,28 @@ export async function uploadVideoToYouTube(input: {
   if (!clipRes.ok) throw new Error(`Failed to download clip (HTTP ${clipRes.status})`);
   const clipBuffer = Buffer.from(await clipRes.arrayBuffer());
 
+  // YouTube classifies a video as a Short when all of these are true:
+  //   1. Vertical aspect ratio (9:16) — Vizard clips are always this format
+  //   2. Duration <= 60 seconds — Vizard's preferLength=[1,2] keeps clips in this range
+  //   3. #Shorts (case-insensitive) appears in title OR description
+  // Adding #Shorts to BOTH maximizes detection reliability.
+  const titleWithTag = ensureShortsTag(input.title);
+  const descriptionWithTag = ensureShortsTag(input.description);
+
   const boundary = `--boundary_${Math.random().toString(36).slice(2)}`;
   const metadata = {
     snippet: {
-      title: input.title.slice(0, 100),
-      description: input.description.slice(0, 5000),
-      tags: input.tags ?? ['shorts', 'ai-clipped'],
+      title: titleWithTag.slice(0, 100),
+      description: descriptionWithTag.slice(0, 5000),
+      tags: input.tags ?? ['Shorts', 'shorts', 'short', 'ai-clipped'],
+      // categoryId 22 = "People & Blogs" — safe default for Shorts.
       categoryId: '22',
+      defaultLanguage: 'en',
     },
     status: {
       privacyStatus: input.privacyStatus ?? 'private',
       selfDeclaredMadeForKids: false,
+      embeddable: true,
     },
   };
 

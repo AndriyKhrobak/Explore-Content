@@ -88,7 +88,13 @@ export default defineEventHandler(async (event) => {
         connection: project.youtube,
         clipUrl: clip.videoUrl,
         title: clip.title,
-        description: `${clip.title}\n\n#shorts\n\nGenerated from: ${job.videoUrl}`,
+        description: [
+          clip.title,
+          '',
+          '#Shorts #viral #ai',
+          '',
+          `Source: ${job.videoUrl}`,
+        ].join('\n'),
         privacyStatus,
       });
       await prisma.upload.update({
