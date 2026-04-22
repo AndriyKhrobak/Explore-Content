@@ -144,6 +144,8 @@ export async function vizardCreateProject(input: {
     maxClipNumber: input.maxClips,
   };
 
+  console.log('[vizard.create] request:', JSON.stringify(body));
+
   let res: CreateResponse;
   try {
     res = await $fetch<CreateResponse>(`${VIZARD_BASE}/project/create`, {
@@ -152,18 +154,20 @@ export async function vizardCreateProject(input: {
       body,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[vizard.create] HTTP error:', message);
-    throw new Error(`Vizard HTTP error: ${message}`);
+    // $fetch throws on non-2xx. Extract the response body if present.
+    const asErr = err as { data?: unknown; status?: number; statusCode?: number; message?: string };
+    const status = asErr.status ?? asErr.statusCode;
+    console.error('[vizard.create] HTTP error', status, 'body:', JSON.stringify(asErr.data));
+    const detail = asErr.data ? JSON.stringify(asErr.data) : asErr.message;
+    throw new Error(`Vizard HTTP ${status ?? '?'}: ${detail}`);
   }
 
-  console.log('[vizard.create] request body:', JSON.stringify(body));
   console.log('[vizard.create] response:', JSON.stringify(res));
 
   const projectId = extractProjectId(res);
   if (!projectId) {
     const detail = JSON.stringify({ code: res.code, message: res.message, data: res.data });
-    throw new Error(`Vizard create succeeded but no projectId in response: ${detail}`);
+    throw new Error(`Vizard create: no projectId in response. ${detail}`);
   }
   return { projectId };
 }
