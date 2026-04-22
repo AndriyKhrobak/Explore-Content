@@ -69,6 +69,50 @@ const oauthError = computed(() => route.query.error as string | undefined);
 const disconnecting = ref(false);
 const disconnectError = ref<string | null>(null);
 
+// === Inline edit of project name ===
+const editingName = ref(false);
+const editedName = ref('');
+const savingName = ref(false);
+const nameError = ref<string | null>(null);
+const nameInputRef = ref<HTMLInputElement | null>(null);
+
+function startEditName() {
+  editedName.value = project.value?.name ?? '';
+  nameError.value = null;
+  editingName.value = true;
+  nextTick(() => {
+    nameInputRef.value?.focus();
+    nameInputRef.value?.select();
+  });
+}
+
+function cancelEditName() {
+  editingName.value = false;
+  nameError.value = null;
+}
+
+async function saveName() {
+  const next = editedName.value.trim();
+  if (!next || next === project.value?.name) {
+    cancelEditName();
+    return;
+  }
+  savingName.value = true;
+  nameError.value = null;
+  try {
+    await $fetch(`/api/projects/${projectId.value}`, {
+      method: 'PATCH',
+      body: { name: next },
+    });
+    await refresh();
+    editingName.value = false;
+  } catch (err) {
+    nameError.value = err instanceof Error ? err.message : 'Не вдалося зберегти';
+  } finally {
+    savingName.value = false;
+  }
+}
+
 async function onDisconnect() {
   if (!confirm('Відключити YouTube-акаунт від цього проекту?')) return;
   disconnectError.value = null;
@@ -288,9 +332,54 @@ function scoreColor(score: number) {
       </nav>
 
       <header class="mb-10">
-        <h1 class="text-3xl font-bold tracking-tight text-white">{{ project!.name }}</h1>
-        <p class="mt-2 text-sm text-neutral-400">
-          Створено {{ new Date(project!.createdAt).toLocaleString('uk') }}
+        <div v-if="!editingName" class="group flex items-center gap-3">
+          <h1 class="text-3xl font-bold tracking-tight text-white">
+            {{ project!.name }}
+          </h1>
+          <button
+            type="button"
+            class="rounded-md p-1.5 text-neutral-500 opacity-0 transition hover:bg-bg-panel hover:text-white group-hover:opacity-100 focus:opacity-100"
+            aria-label="Редагувати назву"
+            @click="startEditName"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
+        </div>
+        <form v-else class="flex items-center gap-2" @submit.prevent="saveName">
+          <input
+            ref="nameInputRef"
+            v-model="editedName"
+            type="text"
+            maxlength="80"
+            required
+            :disabled="savingName"
+            class="flex-1 rounded-lg border border-accent bg-bg-elevated px-3 py-2 text-2xl font-bold tracking-tight text-white outline-none focus:ring-2 focus:ring-accent/30"
+            @keydown.esc="cancelEditName"
+          />
+          <button
+            type="submit"
+            :disabled="savingName || !editedName.trim() || editedName.trim() === project!.name"
+            class="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white transition enabled:hover:bg-accent-glow disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {{ savingName ? '…' : 'Зберегти' }}
+          </button>
+          <button
+            type="button"
+            :disabled="savingName"
+            class="rounded-lg border border-line bg-bg-elevated px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-600"
+            @click="cancelEditName"
+          >
+            Скасувати
+          </button>
+        </form>
+        <p
+          v-if="nameError"
+          class="mt-2 text-xs text-red-400"
+        >
+          {{ nameError }}
         </p>
       </header>
 
