@@ -41,24 +41,68 @@ export function isVizardConfigured(): boolean {
   return Boolean(apiKey());
 }
 
+export type VizardLang = 'en' | 'uk' | 'ru' | 'pl' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'ja' | 'ko' | 'zh';
+
+export const VIZARD_LANGUAGES: Array<{ code: VizardLang; label: string }> = [
+  { code: 'en', label: 'English' },
+  { code: 'uk', label: 'Українська' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'pl', label: 'Polski' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },
+  { code: 'es', label: 'Español' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'pt', label: 'Português' },
+  { code: 'nl', label: 'Nederlands' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+  { code: 'zh', label: '中文' },
+];
+
+// Vizard videoType codes per their docs.
+const VIDEO_TYPE = {
+  GOOGLE_DRIVE: 1,
+  YOUTUBE: 2,
+  VIMEO: 3,
+  STREAMYARD: 4,
+  REMOTE_FILE: 5,
+} as const;
+
+export function detectVideoType(url: string): number {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host.includes('youtube.com') || host.includes('youtu.be')) return VIDEO_TYPE.YOUTUBE;
+    if (host.includes('drive.google.com')) return VIDEO_TYPE.GOOGLE_DRIVE;
+    if (host.includes('vimeo.com')) return VIDEO_TYPE.VIMEO;
+    if (host.includes('streamyard.com')) return VIDEO_TYPE.STREAMYARD;
+    return VIDEO_TYPE.REMOTE_FILE;
+  } catch {
+    return VIDEO_TYPE.REMOTE_FILE;
+  }
+}
+
 export async function vizardCreateProject(input: {
   videoUrl: string;
   maxClips: number;
+  lang?: VizardLang;
 }): Promise<{ projectId: string }> {
   const key = apiKey();
   if (!key) throw new Error('VIZARD_API_KEY not configured');
+
+  const videoType = detectVideoType(input.videoUrl);
 
   const res = await $fetch<CreateResponse>(`${VIZARD_BASE}/project/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', VIZARDAI_API_KEY: key },
     body: {
-      lang: 'en',
+      lang: input.lang ?? 'en',
       preferLength: [1, 2],
       videoUrl: input.videoUrl,
-      videoType: 2,
+      videoType,
       subtitleSwitch: 1,
       headlineSwitch: 1,
-      maxClipNumber: input.maxClips * 2,
+      maxClipNumber: input.maxClips,
     },
   });
 

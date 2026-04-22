@@ -1,11 +1,14 @@
+import type { VizardLang } from '~/server/utils/vizard';
+
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
     projectId?: string;
     videoUrl?: string;
     maxClips?: number;
+    lang?: VizardLang;
   }>(event);
 
-  const { projectId, videoUrl, maxClips = 3 } = body ?? {};
+  const { projectId, videoUrl, maxClips = 3, lang = 'en' } = body ?? {};
 
   if (!projectId) throw createError({ statusCode: 400, statusMessage: 'projectId required' });
   if (!videoUrl) throw createError({ statusCode: 400, statusMessage: 'videoUrl required' });
@@ -37,6 +40,7 @@ export default defineEventHandler(async (event) => {
     const { projectId: vizardProjectId } = await vizardCreateProject({
       videoUrl,
       maxClips: clampedMax,
+      lang,
     });
     const job = await prisma.job.create({
       data: {

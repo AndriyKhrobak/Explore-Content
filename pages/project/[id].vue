@@ -98,8 +98,14 @@ onMounted(() => {
 // === Generate clips form ===
 const videoUrl = ref('');
 const maxClips = ref(3);
+const lang = ref<string>('en');
 const generating = ref(false);
 const generateError = ref<string | null>(null);
+
+const { data: langData } = await useFetch<{
+  languages: Array<{ code: string; label: string }>;
+}>('/api/vizard/languages', { key: 'vizard-languages' });
+const languages = computed(() => langData.value?.languages ?? [{ code: 'en', label: 'English' }]);
 
 async function onGenerate() {
   generateError.value = null;
@@ -111,6 +117,7 @@ async function onGenerate() {
         projectId: projectId.value,
         videoUrl: videoUrl.value,
         maxClips: maxClips.value,
+        lang: lang.value,
       },
     });
     await refresh();
@@ -119,6 +126,15 @@ async function onGenerate() {
   } finally {
     generating.value = false;
   }
+}
+
+// === Clip preview modal ===
+const previewClip = ref<Clip | null>(null);
+function openPreview(clip: Clip) {
+  previewClip.value = clip;
+}
+function closePreview() {
+  previewClip.value = null;
 }
 
 // === Polling while processing ===
@@ -326,16 +342,30 @@ function scoreColor(score: number) {
               class="mt-2 w-full rounded-lg border border-line bg-bg-elevated px-4 py-3 text-neutral-100 placeholder-neutral-500 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30"
             />
           </label>
-          <label class="block text-sm font-medium text-neutral-300">
-            Кількість кліпів: <span class="text-white">{{ maxClips }}</span>
-            <input
-              v-model.number="maxClips"
-              type="range"
-              min="1"
-              max="10"
-              class="mt-2 w-full accent-accent"
-            />
-          </label>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label class="block text-sm font-medium text-neutral-300">
+              Мова відео
+              <select
+                v-model="lang"
+                class="mt-2 w-full rounded-lg border border-line bg-bg-elevated px-4 py-3 text-neutral-100 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30"
+              >
+                <option v-for="l in languages" :key="l.code" :value="l.code">
+                  {{ l.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="block text-sm font-medium text-neutral-300">
+              Кількість кліпів: <span class="text-white">{{ maxClips }}</span>
+              <input
+                v-model.number="maxClips"
+                type="range"
+                min="1"
+                max="10"
+                class="mt-4 w-full accent-accent"
+              />
+            </label>
+          </div>
           <button
             type="submit"
             :disabled="generating || !videoUrl"
@@ -415,6 +445,16 @@ function scoreColor(score: number) {
                 </p>
               </div>
               <div class="flex shrink-0 items-center gap-3">
+                <button
+                  v-if="!latestJob.mock"
+                  type="button"
+                  class="rounded-full border border-line bg-bg-base px-2.5 py-1 text-xs font-medium text-neutral-300 transition hover:border-accent hover:text-white"
+                  title="Переглянути кліп"
+                  @click.prevent.stop="openPreview(clip)"
+                >
+                  ▶ Превью
+                </button>
+
                 <span
                   class="rounded-full px-2.5 py-1 text-xs font-semibold"
                   :style="scoreColor(clip.viralScore)"
@@ -481,6 +521,49 @@ function scoreColor(score: number) {
           {{ uploadError }}
         </p>
       </section>
+    </div>
+
+    <!-- Clip preview modal -->
+    <div
+      v-if="previewClip"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      @click.self="closePreview"
+      @keydown.esc="closePreview"
+    >
+      <div class="relative w-full max-w-md rounded-2xl border border-line bg-bg-panel shadow-2xl">
+        <button
+          type="button"
+          aria-label="Закрити"
+          class="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-bg-base/80 text-neutral-300 transition hover:bg-bg-base hover:text-white"
+          @click="closePreview"
+        >
+          ×
+        </button>
+        <div class="aspect-[9/16] overflow-hidden rounded-t-2xl bg-black">
+          <video
+            :src="previewClip.videoUrl"
+            controls
+            autoplay
+            playsinline
+            class="h-full w-full"
+          />
+        </div>
+        <div class="p-5">
+          <h3 class="text-sm font-semibold text-white">{{ previewClip.title }}</h3>
+          <p class="mt-1 text-xs text-neutral-500">
+            {{ formatTime(previewClip.startSec) }} → {{ formatTime(previewClip.endSec) }} ·
+            {{ previewClip.durationSec }}s · скоринг
+            <span
+              class="ml-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+              :style="scoreColor(previewClip.viralScore)"
+            >
+              {{ previewClip.viralScore }}
+            </span>
+          </p>
+        </div>
+      </div>
     </div>
   </main>
 </template>
