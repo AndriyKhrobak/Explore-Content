@@ -1,6 +1,4 @@
 <script setup lang="ts">
-const config = useRuntimeConfig();
-// These runtime config values aren't exposed to client, so we compute server-side.
 const { data: status } = await useFetch('/api/status', {
   key: 'landing-status',
   default: () => ({ vizardReady: false, youtubeReady: false }),
