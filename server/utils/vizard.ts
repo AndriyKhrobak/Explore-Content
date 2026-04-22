@@ -34,24 +34,6 @@ export function isVizardConfigured(): boolean {
   return Boolean(apiKey());
 }
 
-export type VizardLang = 'en' | 'uk' | 'ru' | 'pl' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'ja' | 'ko' | 'zh';
-
-export const VIZARD_LANGUAGES: Array<{ code: VizardLang; label: string }> = [
-  { code: 'en', label: 'English' },
-  { code: 'uk', label: 'Українська' },
-  { code: 'ru', label: 'Русский' },
-  { code: 'pl', label: 'Polski' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'fr', label: 'Français' },
-  { code: 'es', label: 'Español' },
-  { code: 'it', label: 'Italiano' },
-  { code: 'pt', label: 'Português' },
-  { code: 'nl', label: 'Nederlands' },
-  { code: 'ja', label: '日本語' },
-  { code: 'ko', label: '한국어' },
-  { code: 'zh', label: '中文' },
-];
-
 // Vizard videoType codes per their docs.
 const VIDEO_TYPE = {
   GOOGLE_DRIVE: 1,
@@ -117,8 +99,6 @@ function extractProjectId(res: CreateResponse): string | undefined {
 
 export async function vizardCreateProject(input: {
   videoUrl: string;
-  maxClips: number;
-  lang?: VizardLang;
 }): Promise<{ projectId: string }> {
   const key = apiKey();
   if (!key) throw new Error('VIZARD_API_KEY not configured');
@@ -126,14 +106,15 @@ export async function vizardCreateProject(input: {
   const normalizedUrl = normalizeVideoUrl(input.videoUrl);
   const videoType = detectVideoType(normalizedUrl);
 
+  // Vizard auto-detects language from transcription and chooses the
+  // optimal number of clips based on video content. No need to force.
   const body = {
-    lang: input.lang ?? 'en',
+    lang: 'auto',
     preferLength: [1, 2],
     videoUrl: normalizedUrl,
     videoType,
     subtitleSwitch: 1,
     headlineSwitch: 1,
-    maxClipNumber: input.maxClips,
   };
 
   console.log('[vizard.create] request:', JSON.stringify(body));

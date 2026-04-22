@@ -96,16 +96,11 @@ onMounted(() => {
 });
 
 // === Generate clips form ===
+// Vizard auto-detects language and picks the optimal number of clips
+// based on video content — users just paste a URL.
 const videoUrl = ref('');
-const maxClips = ref(3);
-const lang = ref<string>('en');
 const generating = ref(false);
 const generateError = ref<string | null>(null);
-
-const { data: langData } = await useFetch<{
-  languages: Array<{ code: string; label: string }>;
-}>('/api/vizard/languages', { key: 'vizard-languages' });
-const languages = computed(() => langData.value?.languages ?? [{ code: 'en', label: 'English' }]);
 
 async function onGenerate() {
   generateError.value = null;
@@ -116,8 +111,6 @@ async function onGenerate() {
       body: {
         projectId: projectId.value,
         videoUrl: videoUrl.value,
-        maxClips: maxClips.value,
-        lang: lang.value,
       },
     });
     await refresh();
@@ -294,9 +287,10 @@ function scoreColor(score: number) {
         v-if="!youtube.connected"
         class="rounded-2xl border border-line bg-bg-panel/60 p-6"
       >
-        <h2 class="text-base font-semibold text-white">Крок 1: Підключіть YouTube</h2>
+        <h2 class="text-base font-semibold text-white">Крок 1: Підключіть YouTube Shorts</h2>
         <p class="mt-2 text-sm text-neutral-400">
-          Авторизуйте доступ, щоб сервіс міг завантажувати кліпи на ваш канал.
+          Авторизуйте доступ до вашого YouTube-каналу, щоб сервіс міг
+          публікувати Shorts автоматично.
         </p>
         <a
           :href="`/api/youtube/connect?projectId=${project!.id}`"
@@ -307,7 +301,7 @@ function scoreColor(score: number) {
               d="M23.498 6.186a3.008 3.008 0 0 0-2.117-2.13C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.381.557A3.008 3.008 0 0 0 .502 6.186C0 8.071 0 12 0 12s0 3.929.502 5.814a3.008 3.008 0 0 0 2.117 2.13C4.495 20.5 12 20.5 12 20.5s7.505 0 9.381-.557a3.008 3.008 0 0 0 2.117-2.13C24 15.929 24 12 24 12s0-3.929-.502-5.814zM9.75 15.568V8.432L15.818 12 9.75 15.568z"
             />
           </svg>
-          Підключити YouTube
+          Підключити YouTube Shorts
         </a>
       </section>
 
@@ -386,30 +380,10 @@ function scoreColor(score: number) {
               class="mt-2 w-full rounded-lg border border-line bg-bg-elevated px-4 py-3 text-neutral-100 placeholder-neutral-500 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30"
             />
           </label>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label class="block text-sm font-medium text-neutral-300">
-              Мова відео
-              <select
-                v-model="lang"
-                class="mt-2 w-full rounded-lg border border-line bg-bg-elevated px-4 py-3 text-neutral-100 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30"
-              >
-                <option v-for="l in languages" :key="l.code" :value="l.code">
-                  {{ l.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="block text-sm font-medium text-neutral-300">
-              Кількість кліпів: <span class="text-white">{{ maxClips }}</span>
-              <input
-                v-model.number="maxClips"
-                type="range"
-                min="1"
-                max="10"
-                class="mt-4 w-full accent-accent"
-              />
-            </label>
-          </div>
+          <p class="text-xs text-neutral-500">
+            AI автоматично визначить мову та оптимальну кількість Shorts на
+            основі контенту відео.
+          </p>
           <button
             type="submit"
             :disabled="generating || !videoUrl"
@@ -541,7 +515,7 @@ function scoreColor(score: number) {
                   rel="noreferrer"
                   class="rounded-full bg-green-900/40 px-2.5 py-1 text-xs font-medium text-green-300 hover:bg-green-900/60"
                 >
-                  ✓ на YouTube
+                  ✓ опубліковано
                 </a>
                 <span
                   v-else-if="uploadForClip(clip.clipId)?.status === 'failed'"
@@ -581,8 +555,8 @@ function scoreColor(score: number) {
           >
             {{
               uploading
-                ? 'Завантажуємо…'
-                : `Завантажити обрані (${selected.size}) на YouTube`
+                ? 'Публікуємо Shorts…'
+                : `Опублікувати як Shorts (${selected.size})`
             }}
           </button>
         </div>
@@ -591,9 +565,10 @@ function scoreColor(score: number) {
           v-if="youtube.channelId === 'demo-channel-id'"
           class="mt-4 rounded-lg border border-yellow-900/50 bg-yellow-950/30 px-4 py-3 text-xs text-yellow-300"
         >
-          Demo YouTube-підключення: кліпи позначаються як завантажені у БД,
-          але на справжній канал не летять. Додайте GOOGLE_CLIENT_ID та
-          GOOGLE_CLIENT_SECRET у Vercel env vars щоб увімкнути реальний upload.
+          Demo-підключення: Shorts позначаються як опубліковані у БД, але
+          на справжній канал не летять. Додайте GOOGLE_CLIENT_ID та
+          GOOGLE_CLIENT_SECRET у Vercel env vars щоб увімкнути реальну
+          публікацію.
         </p>
 
         <p

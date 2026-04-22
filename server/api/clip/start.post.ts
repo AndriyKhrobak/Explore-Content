@@ -1,14 +1,10 @@
-import type { VizardLang } from '~/server/utils/vizard';
-
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
     projectId?: string;
     videoUrl?: string;
-    maxClips?: number;
-    lang?: VizardLang;
   }>(event);
 
-  const { projectId, videoUrl, maxClips = 3, lang = 'en' } = body ?? {};
+  const { projectId, videoUrl } = body ?? {};
 
   if (!projectId) throw createError({ statusCode: 400, statusMessage: 'projectId required' });
   if (!videoUrl) throw createError({ statusCode: 400, statusMessage: 'videoUrl required' });
@@ -21,8 +17,6 @@ export default defineEventHandler(async (event) => {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw createError({ statusCode: 404, statusMessage: 'Project not found' });
 
-  const clampedMax = Math.max(1, Math.min(10, Math.floor(maxClips)));
-
   if (!isVizardConfigured()) {
     const job = await prisma.job.create({
       data: {
@@ -30,18 +24,14 @@ export default defineEventHandler(async (event) => {
         videoUrl,
         status: 'ready',
         mock: true,
-        clips: mockClips(clampedMax) as unknown as object,
+        clips: mockClips(3) as unknown as object,
       },
     });
     return { id: job.id, mock: true };
   }
 
   try {
-    const { projectId: vizardProjectId } = await vizardCreateProject({
-      videoUrl,
-      maxClips: clampedMax,
-      lang,
-    });
+    const { projectId: vizardProjectId } = await vizardCreateProject({ videoUrl });
     const job = await prisma.job.create({
       data: {
         projectId,
