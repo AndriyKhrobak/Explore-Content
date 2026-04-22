@@ -2,6 +2,16 @@
 .env.local
 .env.*.local
 
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts.backup
+*.tsbuildinfo
+
+# Vercel
+.vercel
+
 # n8n
 .n8n/
 *.sqlite

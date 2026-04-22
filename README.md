@@ -4,107 +4,146 @@
 
 Сервіс приймає посилання на довге відео, використовує **Vizard.ai** для
 автоматичного знаходження "віральних" моментів, нарізає їх у вертикальні
-кліпи 8–60 с з авто-субтитрами та публікує на YouTube Shorts, TikTok та
+кліпи 8–60 с з авто-субтитрами та публікує на YouTube Shorts, TikTok і
 Instagram Reels.
 
-Реалізовано як n8n workflow (`workflows/clip-video-to-shorts.json`).
+Дві частини:
 
-## Потік роботи
+- **Next.js web-app** (`app/`) — темний SaaS-інтерфейс, деплоїться на Vercel.
+  У `VIZARD_API_KEY`-порожньому стані працює як демо (mock-кліпи).
+- **n8n workflow** (`workflows/clip-video-to-shorts.json`) — автоматизація
+  публікації на всі 3 платформи. Підключається на наступному етапі.
 
-```
-Webhook (POST /clip-video)
-    │  { videoUrl, platforms[], maxClips, context? }
-    ▼
-Vizard.ai: Create Project (POST)
-    │  videoUrl → projectId
-    ▼
-Wait 60s  ◄─────────────────┐
-    │                        │
-    ▼                        │
-Vizard.ai: Get Project       │
-    │                        │
-    ▼                        │
-  status == 2000? ──── no ───┘ (poll loop)
-    │ yes
-    ▼
-Filter clips (top N by virality)
-    │
-    ▼
-Loop Over Items (Split in Batches)
-    │
-    ├─► Download clip binary (HTTP Request)
-    │
-    ├─► If platforms ∋ "youtube"  → YouTube node (video/upload)
-    ├─► If platforms ∋ "tiktok"   → HTTP Request (TikTok Content Posting API)
-    └─► If platforms ∋ "instagram"→ HTTP Request (Instagram Graph API — Reels)
+## Демо-режим vs production
+
+| Стан | Що робить UI |
+|------|--------------|
+| `VIZARD_API_KEY` не заданий | Показує 3 mock-кліпи з фейковими тайтлами і скорингом. |
+| `VIZARD_API_KEY` заданий | Дзвонить у Vizard, поллить статус, показує реальні кліпи з посиланнями. |
+| + n8n webhook (майбутнє) | Додатково публікує кожен кліп на обрані платформи. |
+
+## Швидкий запуск локально
+
+```bash
+npm install
+npm run dev
+# → http://localhost:3000
 ```
 
-## Вхідні дані
+Без `VIZARD_API_KEY` працює у mock-режимі. З ключем (`.env.local`):
 
-```http
-POST /webhook/clip-video
-Content-Type: application/json
+```env
+VIZARD_API_KEY=your-key-from-vizard.ai-settings
+```
 
+## Деплой на Vercel
+
+1. Push цю гілку на GitHub.
+2. https://vercel.com → `Add New` → `Project` → Import цей репо.
+3. Framework auto-detect: **Next.js** (нічого не змінюйте).
+4. **Environment Variables** (опційно): додайте `VIZARD_API_KEY` якщо
+   хочете живі кліпи одразу. Без неї деплой все одно запрацює у демо-режимі.
+5. `Deploy`. Через ~60с отримуєте `https://<project>.vercel.app`.
+
+Альтернатива через CLI:
+
+```bash
+npm install -g vercel
+vercel            # перший раз лінкує проект
+vercel --prod     # прод-деплой
+```
+
+## API
+
+Web-UI дзвонить на ці роути; їх можна викликати й напряму.
+
+### `POST /api/clip/start`
+
+```json
 {
   "videoUrl": "https://www.youtube.com/watch?v=...",
   "platforms": ["youtube", "tiktok", "instagram"],
-  "maxClips": 3,
-  "minViralScore": 80,
-  "context": "Фокус на найбільш інформативні моменти про AI"
+  "maxClips": 3
 }
 ```
 
-- `videoUrl` — посилання на довге відео (YouTube, Vimeo, прямий mp4).
-- `platforms` — куди публікувати (будь-яка комбінація).
-- `maxClips` — скільки верхніх кліпів взяти (за віральним скорингом Vizard).
-- `minViralScore` — нижня межа віральності (0–100), Vizard повертає значення.
-- `context` — (майбутнє) для AI-фільтрації кліпів за темою.
+Відповідь: `{ "id": "job_xxx", "mock": false }`.
+
+### `GET /api/clip/status?id=<job_id>`
+
+```json
+{
+  "id": "job_xxx",
+  "status": "processing" | "ready" | "failed",
+  "mock": false,
+  "platforms": ["youtube", "tiktok", "instagram"],
+  "clips": [
+    { "clipId": "...", "title": "...", "viralScore": 92,
+      "videoUrl": "https://...", "startSec": 45, "endSec": 73, "durationSec": 28 }
+  ]
+}
+```
+
+Клієнт поллить `status` кожні 8 секунд доки не `ready`/`failed`.
+
+> **Важливо про Vercel serverless:** job-store — in-memory Map, тому
+> після холодного старту функції job'и "губляться". Для production
+> переведіть на Vercel KV або Upstash Redis (5 хвилин роботи, див.
+> `lib/jobs.ts` — один map-об'єкт).
+
+## Потік n8n workflow (публікація)
+
+```
+Webhook → Vizard → poll → filter top clips → loop →
+  ├─ YouTube Shorts (youTube node)
+  ├─ TikTok (Content Posting API)
+  └─ Instagram Reels (Graph API)
+```
+
+Наразі не підключений до web-UI — запускається як окремий pipeline через
+свій webhook URL. На v2 web-UI передаватиме `job_id` у n8n або сам UI
+викликатиме webhook після `status=ready`.
 
 ## Авторські права — важливо
 
-Workflow **не обходить** copyright. Ви несете відповідальність за вміст,
-який завантажуєте. Безпечні сценарії:
+Сервіс **не обходить** copyright. Безпечні сценарії:
 
 1. **Власні довгі відео** — ваш канал, ваші стріми, ваші подкасти.
-2. **Creative Commons** — використовуйте YouTube-фільтр `Creative Commons`
-   і вказуйте атрибуцію у описі.
-3. **Отриманий дозвіл** — явна письмова згода автора (партнерство, афіліат).
+2. **Creative Commons** — YouTube-фільтр `Creative Commons`, із атрибуцією.
+3. **Явний дозвіл автора** — партнерство/афіліат.
 
-"Fair use" не працює автоматично — YouTube Content ID блокує кліпи
-незалежно від трансформації. При бажанні робити "реакції/аналіз" потрібно
-додавати власний голос/вебкам/коментарі, але ризик страйку залишається.
+"Fair use" автоматично не захищає. Content ID / Audible Magic / Rights
+Manager ловлять збіги навіть при кроппінгу, зміні швидкості та мірроренні.
 
-## Швидкий старт
-
-1. Імпортуйте `workflows/clip-video-to-shorts.json` у вашу n8n інстанцію
-   (Workflows → Import from File).
-2. Скопіюйте `.env.example` → додайте свої креденшали у n8n Credentials:
-   - `Vizard API` (Header Auth → `VIZARDAI_API_KEY`)
-   - `YouTube OAuth2`
-   - `TikTok OAuth2` (Content Posting API)
-   - `Instagram Graph API` (Facebook OAuth2)
-3. Увімкніть workflow, скопіюйте Production webhook URL.
-4. POST JSON на цей URL — отримаєте список кліпів та статуси публікації.
-
-Деталі: [`docs/SETUP.md`](docs/SETUP.md) та [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Деталі у [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Структура репозиторію
 
 ```
 .
-├── README.md                          — цей файл
-├── .env.example                       — шаблон секретів
+├── app/                              — Next.js App Router
+│   ├── layout.tsx, page.tsx, globals.css
+│   └── api/clip/{start,status}/route.ts
+├── components/
+│   └── ClipForm.tsx                  — клієнтська форма з поллінгом
+├── lib/
+│   ├── vizard.ts                     — клієнт Vizard API (+ mock)
+│   └── jobs.ts                       — in-memory job store
 ├── workflows/
-│   └── clip-video-to-shorts.json      — n8n workflow (імпортується напряму)
-└── docs/
-    ├── ARCHITECTURE.md                — детальний дизайн
-    └── SETUP.md                       — покрокове налаштування
+│   └── clip-video-to-shorts.json     — n8n workflow (імпортується у n8n UI)
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── SETUP.md
+├── .env.example
+├── tailwind.config.ts, next.config.ts, tsconfig.json
+└── package.json
 ```
 
 ## Roadmap
 
-- [ ] v1 (MVP): ручне передавання `videoUrl` через webhook, публікація на 3 платформи.
-- [ ] v2: AI-асистент вибирає джерела за темою (RSS/YouTube search + LLM-фільтр).
-- [ ] v3: Планувальник постингу (cron + розподіл за часовими слотами).
-- [ ] v4: Аналітика (збір метрик переглядів з YouTube/TikTok/IG API).
-- [ ] v5: Зворотний зв'язок AI на основі аналітики (що "залетіло" — роби ще такого).
+- [x] **v0**: Темний SaaS-UI + mock-режим + real-Vizard на Vercel.
+- [ ] **v1**: Підключити n8n webhook → публікація після вибору клієнтом.
+- [ ] **v2**: Persistent store (Vercel KV) замість in-memory Map.
+- [ ] **v3**: AI-асистент обирає відео-джерела за темою.
+- [ ] **v4**: Планувальник постингу (часові слоти, черга).
+- [ ] **v5**: Аналітика + зворотний зв'язок ("що залетіло — генеруй ще такого").
