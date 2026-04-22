@@ -1,8 +1,24 @@
 <script setup lang="ts">
+type ProjectListItem = {
+  id: string;
+  name: string;
+  createdAt: string;
+  channelTitle: string | null;
+  jobsCount: number;
+  uploadsCount: number;
+};
+
 const { data: status } = await useFetch('/api/status', {
   key: 'landing-status',
   default: () => ({ vizardReady: false, youtubeReady: false }),
 });
+
+const { data: projectsData } = await useFetch<{ projects: ProjectListItem[] }>(
+  '/api/projects',
+  { key: 'landing-projects', default: () => ({ projects: [] }) },
+);
+
+const projects = computed(() => projectsData.value?.projects ?? []);
 
 const name = ref('');
 const submitting = ref(false);
@@ -21,6 +37,19 @@ async function onSubmit() {
     const message = err instanceof Error ? err.message : 'Unknown error';
     errorMsg.value = message;
     submitting.value = false;
+  }
+}
+
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('uk', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
   }
 }
 </script>
@@ -90,7 +119,50 @@ async function onSubmit() {
         </p>
       </form>
 
-      <ol class="mt-12 w-full space-y-3 text-sm text-neutral-400">
+      <!-- Existing projects -->
+      <section v-if="projects.length > 0" class="mt-10 w-full">
+        <div class="mb-3 flex items-baseline justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-neutral-400">
+            Ваші проекти
+          </h2>
+          <span class="text-xs text-neutral-500">{{ projects.length }}</span>
+        </div>
+
+        <ul class="space-y-2">
+          <li v-for="p in projects" :key="p.id">
+            <NuxtLink
+              :to="`/project/${p.id}`"
+              class="group flex items-center gap-4 rounded-lg border border-line bg-bg-panel/40 px-4 py-3 transition hover:border-accent hover:bg-bg-panel/80"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <p class="truncate text-sm font-medium text-neutral-100 group-hover:text-white">
+                    {{ p.name }}
+                  </p>
+                  <span
+                    v-if="p.channelTitle"
+                    class="inline-flex items-center gap-1 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-300"
+                    :title="`YouTube: ${p.channelTitle}`"
+                  >
+                    <span class="h-1 w-1 rounded-full bg-green-400" aria-hidden />
+                    YT
+                  </span>
+                </div>
+                <p class="mt-0.5 text-xs text-neutral-500">
+                  {{ formatDate(p.createdAt) }}
+                  <span v-if="p.jobsCount > 0" class="ml-2">· {{ p.jobsCount }} job{{ p.jobsCount === 1 ? '' : 's' }}</span>
+                  <span v-if="p.uploadsCount > 0" class="ml-2">· {{ p.uploadsCount }} upload{{ p.uploadsCount === 1 ? '' : 's' }}</span>
+                </p>
+              </div>
+              <span class="shrink-0 text-neutral-600 transition group-hover:translate-x-0.5 group-hover:text-accent-glow">
+                →
+              </span>
+            </NuxtLink>
+          </li>
+        </ul>
+      </section>
+
+      <ol v-else class="mt-12 w-full space-y-3 text-sm text-neutral-400">
         <li
           v-for="(text, i) in [
             'Створюєте проект і даєте йому назву',
