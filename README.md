@@ -1,26 +1,32 @@
 # Explore-Content
 
-Автоматизація створення Shorts/Reels/TikTok-кліпів із довгих відео.
+Автоматизація створення вертикальних Shorts із довгих YouTube-відео:
+вставляєте посилання → AI (**Vizard.ai**) знаходить найкращі моменти
+та віддає кліпи з субтитрами → вибираєте які публікувати → сервіс
+завантажує їх на ваш YouTube-канал через Data API.
 
-Сервіс приймає посилання на довге відео, використовує **Vizard.ai** для
-автоматичного знаходження "віральних" моментів, нарізає їх у вертикальні
-кліпи 8–60 с з авто-субтитрами та публікує на YouTube Shorts, TikTok і
-Instagram Reels.
+Деплоїться на Vercel. Без API-ключів працює як демо (mock-кліпи +
+симуляція YouTube-підключення) — можна одразу побачити весь UX.
 
-Дві частини:
+## Флоу користувача
 
-- **Next.js web-app** (`app/`) — темний SaaS-інтерфейс, деплоїться на Vercel.
-  У `VIZARD_API_KEY`-порожньому стані працює як демо (mock-кліпи).
-- **n8n workflow** (`workflows/clip-video-to-shorts.json`) — автоматизація
-  публікації на всі 3 платформи. Підключається на наступному етапі.
+1. **`/`** — поле "Назва проекту" + кнопка `Створити`.
+2. **`/project/[id]`** — стан 1: кнопка `Підключити YouTube`
+   (OAuth через Google, якщо `GOOGLE_CLIENT_ID` заданий — інакше
+   симуляція).
+3. **Стан 2**: поле YouTube-URL + слайдер кількості кліпів + кнопка
+   `Згенерувати кліпи`. Запит іде у Vizard.
+4. **Стан 3**: список кліпів з чекбоксами, віральним скорингом
+   (0–100) і таймкодами. Вибираєте + обираєте приватність
+   (private/unlisted/public) + `Завантажити обрані на YouTube`.
 
-## Демо-режим vs production
+## Режими роботи
 
-| Стан | Що робить UI |
-|------|--------------|
-| `VIZARD_API_KEY` не заданий | Показує 3 mock-кліпи з фейковими тайтлами і скорингом. |
-| `VIZARD_API_KEY` заданий | Дзвонить у Vizard, поллить статус, показує реальні кліпи з посиланнями. |
-| + n8n webhook (майбутнє) | Додатково публікує кожен кліп на обрані платформи. |
+| ENV | UI | Що реально відбувається |
+|-----|----|-------------------------|
+| Нічого | Демо | mock-кліпи, фейкове підключення YouTube, fake upload URL |
+| `VIZARD_API_KEY` | Part-real | Справжні кліпи з Vizard, але YouTube симулюється |
+| + `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Production | Все справжнє — реальні відео летять на ваш канал |
 
 ## Швидкий запуск локально
 
@@ -30,120 +36,106 @@ npm run dev
 # → http://localhost:3000
 ```
 
-Без `VIZARD_API_KEY` працює у mock-режимі. З ключем (`.env.local`):
-
-```env
-VIZARD_API_KEY=your-key-from-vizard.ai-settings
-```
+Без жодних env-змінних UI працює повністю як демо. Для реальних API
+створіть `.env.local` з шаблоном `.env.example`.
 
 ## Деплой на Vercel
 
 1. Push цю гілку на GitHub.
-2. https://vercel.com → `Add New` → `Project` → Import цей репо.
-3. Framework auto-detect: **Next.js** (нічого не змінюйте).
-4. **Environment Variables** (опційно): додайте `VIZARD_API_KEY` якщо
-   хочете живі кліпи одразу. Без неї деплой все одно запрацює у демо-режимі.
-5. `Deploy`. Через ~60с отримуєте `https://<project>.vercel.app`.
+2. https://vercel.com → `Add New → Project` → імпорт репозиторію.
+3. Framework: **Next.js** (auto-detect).
+4. `Environment Variables`:
+   - `VIZARD_API_KEY` (опційно — для реальних кліпів).
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (опційно — для
+     реального YouTube upload).
+5. `Deploy` → `https://<project>.vercel.app`.
 
-Альтернатива через CLI:
+Після деплою: у Google Cloud Console додайте
+`https://<project>.vercel.app/api/youtube/callback` до Authorized
+redirect URIs OAuth-клієнта.
 
-```bash
-npm install -g vercel
-vercel            # перший раз лінкує проект
-vercel --prod     # прод-деплой
-```
+## Налаштування Google OAuth (для production)
 
-## API
+1. https://console.cloud.google.com → створіть проект.
+2. `APIs & Services → Library` → enable **YouTube Data API v3**.
+3. `APIs & Services → OAuth consent screen` → External → заповніть
+   мінімум (app name, support email). На Testing додайте свій email у
+   `Test users`, щоб могти авторизуватись без review.
+4. `APIs & Services → Credentials → Create OAuth client ID`:
+   - Type: **Web application**
+   - Authorized redirect URIs:
+     - `http://localhost:3000/api/youtube/callback`
+     - `https://<your-vercel>.vercel.app/api/youtube/callback`
+5. Збережіть Client ID + Client Secret у env.
 
-Web-UI дзвонить на ці роути; їх можна викликати й напряму.
+## API (внутрішнє)
 
-### `POST /api/clip/start`
+- `POST /api/projects` — створити проект (`{ name }`).
+- `GET  /api/projects/:id` — отримати стан проекту (кліпи, uploads, YT).
+- `GET  /api/youtube/connect?projectId=…` — редірект у Google OAuth.
+- `GET  /api/youtube/callback?code&state` — callback, зберігає токен.
+- `POST /api/clip/start` — Vizard create (`{ projectId, videoUrl, maxClips }`).
+- `GET  /api/clip/status?projectId&id` — полінг статусу, повертає кліпи.
+- `POST /api/clip/upload` — YouTube upload
+  (`{ projectId, jobId, clipIds[], privacyStatus }`).
 
-```json
-{
-  "videoUrl": "https://www.youtube.com/watch?v=...",
-  "platforms": ["youtube", "tiktok", "instagram"],
-  "maxClips": 3
-}
-```
+## Архітектурні нотатки
 
-Відповідь: `{ "id": "job_xxx", "mock": false }`.
+- **Persistence:** in-memory `Map` у `lib/projects.ts`. Для Vercel
+  serverless це означає що дані зникають між холодними стартами.
+  Для реального prod-у переведіть на Vercel KV або Upstash Redis
+  (~30 рядків — замінити `Map` на KV-клієнт).
+- **YouTube upload:** multipart/related через Data API `videos.insert`.
+  Одна request скачує кліп у Buffer і лупить у Google. Вертикальне
+  відео ≤60 с → YouTube сам перетворює у Short. Клавіша `maxDuration`
+  у роуті = 60с (Vercel Pro потрібен).
+- **Vizard:** `project/create` + поллінг `project/query/{id}` поки
+  `code === 2000`. Клієнт поллить `/api/clip/status` кожні 8 секунд.
+- **OAuth refresh:** токен автоматично оновлюється через
+  `refresh_token` перед upload (`ensureFreshToken`).
 
-### `GET /api/clip/status?id=<job_id>`
+## Безпека та копірайт
 
-```json
-{
-  "id": "job_xxx",
-  "status": "processing" | "ready" | "failed",
-  "mock": false,
-  "platforms": ["youtube", "tiktok", "instagram"],
-  "clips": [
-    { "clipId": "...", "title": "...", "viralScore": 92,
-      "videoUrl": "https://...", "startSec": 45, "endSec": 73, "durationSec": 28 }
-  ]
-}
-```
+Сервіс **не обходить** Content ID. Використовуйте тільки:
 
-Клієнт поллить `status` кожні 8 секунд доки не `ready`/`failed`.
-
-> **Важливо про Vercel serverless:** job-store — in-memory Map, тому
-> після холодного старту функції job'и "губляться". Для production
-> переведіть на Vercel KV або Upstash Redis (5 хвилин роботи, див.
-> `lib/jobs.ts` — один map-об'єкт).
-
-## Потік n8n workflow (публікація)
-
-```
-Webhook → Vizard → poll → filter top clips → loop →
-  ├─ YouTube Shorts (youTube node)
-  ├─ TikTok (Content Posting API)
-  └─ Instagram Reels (Graph API)
-```
-
-Наразі не підключений до web-UI — запускається як окремий pipeline через
-свій webhook URL. На v2 web-UI передаватиме `job_id` у n8n або сам UI
-викликатиме webhook після `status=ready`.
-
-## Авторські права — важливо
-
-Сервіс **не обходить** copyright. Безпечні сценарії:
-
-1. **Власні довгі відео** — ваш канал, ваші стріми, ваші подкасти.
-2. **Creative Commons** — YouTube-фільтр `Creative Commons`, із атрибуцією.
-3. **Явний дозвіл автора** — партнерство/афіліат.
-
-"Fair use" автоматично не захищає. Content ID / Audible Magic / Rights
-Manager ловлять збіги навіть при кроппінгу, зміні швидкості та мірроренні.
-
-Деталі у [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+1. Власні відео (ваш канал, подкасти, стріми).
+2. Creative Commons з атрибуцією.
+3. Відео з явним дозволом автора.
 
 ## Структура репозиторію
 
 ```
-.
-├── app/                              — Next.js App Router
-│   ├── layout.tsx, page.tsx, globals.css
-│   └── api/clip/{start,status}/route.ts
-├── components/
-│   └── ClipForm.tsx                  — клієнтська форма з поллінгом
-├── lib/
-│   ├── vizard.ts                     — клієнт Vizard API (+ mock)
-│   └── jobs.ts                       — in-memory job store
-├── workflows/
-│   └── clip-video-to-shorts.json     — n8n workflow (імпортується у n8n UI)
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── SETUP.md
-├── .env.example
-├── tailwind.config.ts, next.config.ts, tsconfig.json
-└── package.json
+app/
+├── page.tsx                           — лендінг + форма створення
+├── project/[id]/page.tsx              — сторінка проекту (server)
+└── api/
+    ├── projects/                      — CRUD проектів
+    ├── youtube/{connect,callback}/    — OAuth 2.0 flow
+    └── clip/{start,status,upload}/    — Vizard + YouTube upload
+
+components/
+├── CreateProjectForm.tsx              — форма на лендінгу
+└── ProjectClient.tsx                  — стейт-машина сторінки проекту
+
+lib/
+├── vizard.ts                          — Vizard API + mock
+├── youtube.ts                         — OAuth + Data API upload
+└── projects.ts                        — in-memory store
+
+workflows/
+└── clip-video-to-shorts.json          — n8n workflow (TikTok+IG на майбутнє)
+
+docs/
+├── ARCHITECTURE.md
+└── SETUP.md                           — для n8n, не для web-app
 ```
 
 ## Roadmap
 
-- [x] **v0**: Темний SaaS-UI + mock-режим + real-Vizard на Vercel.
-- [ ] **v1**: Підключити n8n webhook → публікація після вибору клієнтом.
-- [ ] **v2**: Persistent store (Vercel KV) замість in-memory Map.
-- [ ] **v3**: AI-асистент обирає відео-джерела за темою.
-- [ ] **v4**: Планувальник постингу (часові слоти, черга).
-- [ ] **v5**: Аналітика + зворотний зв'язок ("що залетіло — генеруй ще такого").
+- [x] **v0**: UI + mock-режим.
+- [x] **v1**: Створення проектів + YouTube OAuth + upload через Data API.
+- [ ] **v2**: Vercel KV замість in-memory Map (щоб дані не губились).
+- [ ] **v3**: TikTok + Instagram upload у web-app (зараз лише у n8n JSON).
+- [ ] **v4**: Планувальник (черга публікацій + часові слоти).
+- [ ] **v5**: AI-асистент шукає джерела за темою/контекстом.
+- [ ] **v6**: Аналітика переглядів + feedback loop.

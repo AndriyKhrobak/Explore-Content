@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createProject, isConfigured, mockClips } from '@/lib/vizard';
-import { newJobId, putJob } from '@/lib/jobs';
+import { createProject as createVizardProject, isConfigured, mockClips } from '@/lib/vizard';
+import { getProject, newId, upsertJob } from '@/lib/projects';
 
 export const runtime = 'nodejs';
 
 type Body = {
+  projectId?: string;
   videoUrl?: string;
-  platforms?: string[];
   maxClips?: number;
 };
 
@@ -18,49 +18,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { videoUrl, platforms = ['youtube', 'tiktok', 'instagram'], maxClips = 3 } = body;
+  const { projectId, videoUrl, maxClips = 3 } = body;
 
+  if (!projectId) {
+    return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
+  }
   if (!videoUrl || typeof videoUrl !== 'string') {
     return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 });
   }
-
   try {
     new URL(videoUrl);
   } catch {
     return NextResponse.json({ error: 'videoUrl must be a valid URL' }, { status: 400 });
   }
 
-  const id = newJobId();
+  const project = getProject(projectId);
+  if (!project) {
+    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  }
+
+  const jobId = newId('job');
   const clampedMax = Math.max(1, Math.min(10, Math.floor(maxClips)));
 
   if (!isConfigured()) {
-    putJob({
-      id,
+    upsertJob(projectId, {
+      id: jobId,
       videoUrl,
-      platforms,
-      maxClips: clampedMax,
       status: 'ready',
       clips: mockClips(clampedMax),
       mock: true,
       createdAt: Date.now(),
     });
-    return NextResponse.json({ id, mock: true });
+    return NextResponse.json({ id: jobId, mock: true });
   }
 
   try {
-    const { projectId } = await createProject({ videoUrl, maxClips: clampedMax });
-    putJob({
-      id,
+    const { projectId: vizardProjectId } = await createVizardProject({
       videoUrl,
-      platforms,
       maxClips: clampedMax,
+    });
+    upsertJob(projectId, {
+      id: jobId,
+      videoUrl,
       status: 'processing',
       clips: [],
-      vizardProjectId: projectId,
+      vizardProjectId,
       mock: false,
       createdAt: Date.now(),
     });
-    return NextResponse.json({ id, mock: false });
+    return NextResponse.json({ id: jobId, mock: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 502 });
