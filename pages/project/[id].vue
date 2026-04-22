@@ -137,23 +137,43 @@ function closePreview() {
   previewClip.value = null;
 }
 
-// === Polling while processing ===
+// === Polling while processing + elapsed timer ===
 let pollHandle: ReturnType<typeof setInterval> | null = null;
+let tickHandle: ReturnType<typeof setInterval> | null = null;
+const now = ref(Date.now());
+
+const elapsedLabel = computed(() => {
+  const job = latestJob.value;
+  if (!job || job.status !== 'processing') return '';
+  const startMs = new Date(job.createdAt).getTime();
+  const seconds = Math.max(0, Math.floor((now.value - startMs) / 1000));
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+});
 
 watchEffect(() => {
   if (pollHandle) {
     clearInterval(pollHandle);
     pollHandle = null;
   }
+  if (tickHandle) {
+    clearInterval(tickHandle);
+    tickHandle = null;
+  }
   if (latestJob.value?.status === 'processing') {
     pollHandle = setInterval(() => {
       void refresh();
-    }, 8000);
+    }, 10000);
+    tickHandle = setInterval(() => {
+      now.value = Date.now();
+    }, 1000);
   }
 });
 
 onBeforeUnmount(() => {
   if (pollHandle) clearInterval(pollHandle);
+  if (tickHandle) clearInterval(tickHandle);
 });
 
 // === Clip selection + upload ===
@@ -387,13 +407,31 @@ function scoreColor(score: number) {
         v-if="latestJob?.status === 'processing'"
         class="mt-6 rounded-2xl border border-line bg-bg-panel/60 p-6 text-sm text-neutral-400"
       >
-        <div class="flex items-center gap-3">
-          <span class="relative flex h-2 w-2">
-            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-            <span class="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-          </span>
-          Vizard обробляє відео. Це може зайняти 2–5 хвилин.
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+            </span>
+            <span>
+              Vizard обробляє відео…
+              <span class="ml-1 font-mono text-neutral-300">{{ elapsedLabel }}</span>
+            </span>
+          </div>
+          <a
+            :href="`https://vizard.ai/dashboard`"
+            target="_blank"
+            rel="noreferrer"
+            class="text-xs text-neutral-500 hover:text-neutral-300"
+          >
+            Vizard Dashboard ↗
+          </a>
         </div>
+        <p class="mt-3 text-xs text-neutral-500">
+          Коротке відео (~5 хв) обробляється 2–4 хвилини. Година відео — до
+          15–20 хвилин. Можете закрити вкладку — прогрес зберігається у БД,
+          поверніться пізніше на цю сторінку.
+        </p>
       </div>
 
       <div
