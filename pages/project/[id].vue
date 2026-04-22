@@ -239,6 +239,32 @@ function formatTime(totalSec: number) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * Convert a YouTube watch URL into an embeddable iframe URL.
+ * Returns null for non-YouTube URLs so we fall back to <video>.
+ */
+function toEmbedUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host.includes('youtube.com') && u.pathname === '/watch') {
+      const v = u.searchParams.get('v');
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0];
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const sourceEmbedUrl = computed(() =>
+  latestJob.value ? toEmbedUrl(latestJob.value.videoUrl) : null,
+);
+
 function scoreColor(score: number) {
   const hue = Math.round((score / 100) * 140);
   return {
@@ -456,6 +482,42 @@ function scoreColor(score: number) {
       >
         Mock-режим: VIZARD_API_KEY не налаштовано. Показано демо-кліпи.
       </div>
+
+      <!-- Source video preview -->
+      <section
+        v-if="latestJob?.status === 'ready' && latestJob.clips.length > 0"
+        class="mt-6 rounded-2xl border border-line bg-bg-panel/60 p-6"
+      >
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="text-base font-semibold text-white">Вихідне відео</h3>
+          <a
+            :href="latestJob.videoUrl"
+            target="_blank"
+            rel="noreferrer"
+            class="shrink-0 text-xs text-neutral-500 hover:text-neutral-300"
+          >
+            відкрити на YouTube ↗
+          </a>
+        </div>
+        <div class="overflow-hidden rounded-lg border border-line bg-black">
+          <div class="relative aspect-video w-full">
+            <iframe
+              v-if="sourceEmbedUrl"
+              :src="sourceEmbedUrl"
+              class="absolute inset-0 h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            />
+            <video
+              v-else
+              :src="latestJob.videoUrl"
+              controls
+              class="absolute inset-0 h-full w-full"
+            />
+          </div>
+        </div>
+      </section>
 
       <!-- Step 3: Select & upload clips -->
       <section
