@@ -56,6 +56,7 @@ type ExchangedTokens = {
   expiresAt: Date;
   channelId?: string;
   channelTitle?: string;
+  channelThumbnailUrl?: string;
 };
 
 export async function exchangeCode(origin: string, code: string): Promise<ExchangedTokens> {
@@ -80,6 +81,7 @@ export async function exchangeCode(origin: string, code: string): Promise<Exchan
     expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
     channelId: channel?.id,
     channelTitle: channel?.title,
+    channelThumbnailUrl: channel?.thumbnailUrl,
   };
 }
 
@@ -109,16 +111,42 @@ export async function refreshAccessToken(conn: YouTubeConnection): Promise<Excha
 
 async function fetchChannelInfo(
   accessToken: string,
-): Promise<{ id: string; title: string } | undefined> {
+): Promise<{ id: string; title: string; thumbnailUrl?: string } | undefined> {
   try {
-    const data = await $fetch<{ items?: Array<{ id: string; snippet: { title: string } }> }>(
+    type ChannelItem = {
+      id: string;
+      snippet: {
+        title: string;
+        thumbnails?: {
+          default?: { url: string };
+          medium?: { url: string };
+          high?: { url: string };
+        };
+      };
+    };
+    const data = await $fetch<{ items?: ChannelItem[] }>(
       `${YOUTUBE_API}/channels?part=snippet&mine=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     const first = data.items?.[0];
-    return first ? { id: first.id, title: first.snippet.title } : undefined;
+    if (!first) return undefined;
+    const thumbs = first.snippet.thumbnails;
+    const thumbnailUrl = thumbs?.medium?.url ?? thumbs?.default?.url ?? thumbs?.high?.url;
+    return { id: first.id, title: first.snippet.title, thumbnailUrl };
   } catch {
     return undefined;
+  }
+}
+
+export async function revokeToken(token: string): Promise<void> {
+  try {
+    await $fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }).toString(),
+    });
+  } catch {
+    // Revoke is best-effort; token may already be invalid.
   }
 }
 

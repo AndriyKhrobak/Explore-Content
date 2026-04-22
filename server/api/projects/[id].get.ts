@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
           connected: true,
           channelTitle: project.youtube.channelTitle,
           channelId: project.youtube.channelId,
+          channelThumbnailUrl: project.youtube.channelThumbnailUrl,
         }
       : { connected: false },
     jobs: project.jobs.map((j) => ({

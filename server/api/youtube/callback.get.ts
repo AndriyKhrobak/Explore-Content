@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
         expiresAt: tokens.expiresAt,
         channelId: tokens.channelId,
         channelTitle: tokens.channelTitle,
+        channelThumbnailUrl: tokens.channelThumbnailUrl,
       },
       update: {
         accessToken: tokens.accessToken,
@@ -35,6 +36,7 @@ export default defineEventHandler(async (event) => {
         expiresAt: tokens.expiresAt,
         channelId: tokens.channelId,
         channelTitle: tokens.channelTitle,
+        channelThumbnailUrl: tokens.channelThumbnailUrl,
       },
     });
     return sendRedirect(event, `/project/${state}?connected=1`, 302);

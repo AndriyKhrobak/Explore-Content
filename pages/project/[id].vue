@@ -33,7 +33,12 @@ type Project = {
   id: string;
   name: string;
   createdAt: string;
-  youtube: { connected: boolean; channelTitle?: string | null; channelId?: string | null };
+  youtube: {
+    connected: boolean;
+    channelTitle?: string | null;
+    channelId?: string | null;
+    channelThumbnailUrl?: string | null;
+  };
   jobs: Job[];
   uploads: Upload[];
 };
@@ -60,6 +65,26 @@ const youtube = computed(() => project.value!.youtube);
 
 const connectedFlash = computed(() => route.query.connected as string | undefined);
 const oauthError = computed(() => route.query.error as string | undefined);
+
+const disconnecting = ref(false);
+const disconnectError = ref<string | null>(null);
+
+async function onDisconnect() {
+  if (!confirm('Відключити YouTube-акаунт від цього проекту?')) return;
+  disconnectError.value = null;
+  disconnecting.value = true;
+  try {
+    await $fetch('/api/youtube/disconnect', {
+      method: 'POST',
+      body: { projectId: projectId.value },
+    });
+    await refresh();
+  } catch (err) {
+    disconnectError.value = err instanceof Error ? err.message : 'Disconnect failed';
+  } finally {
+    disconnecting.value = false;
+  }
+}
 
 // Flash banner auto-clear
 onMounted(() => {
@@ -227,17 +252,64 @@ function scoreColor(score: number) {
       </section>
 
       <section v-else class="rounded-2xl border border-line bg-bg-panel/60 p-6">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h2 class="text-base font-semibold text-white">YouTube підключено</h2>
-            <p class="mt-1 text-sm text-neutral-400">
-              Канал: <span class="text-neutral-200">{{ youtube.channelTitle || 'Unknown' }}</span>
+        <div class="flex items-center gap-4">
+          <div
+            class="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-line bg-bg-elevated"
+          >
+            <img
+              v-if="youtube.channelThumbnailUrl"
+              :src="youtube.channelThumbnailUrl"
+              :alt="youtube.channelTitle || 'YouTube channel'"
+              class="h-full w-full object-cover"
+              referrerpolicy="no-referrer"
+            />
+            <div
+              v-else
+              class="flex h-full w-full items-center justify-center text-neutral-500"
+              aria-hidden
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M23.498 6.186a3.008 3.008 0 0 0-2.117-2.13C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.381.557A3.008 3.008 0 0 0 .502 6.186C0 8.071 0 12 0 12s0 3.929.502 5.814a3.008 3.008 0 0 0 2.117 2.13C4.495 20.5 12 20.5 12 20.5s7.505 0 9.381-.557a3.008 3.008 0 0 0 2.117-2.13C24 15.929 24 12 24 12s0-3.929-.502-5.814zM9.75 15.568V8.432L15.818 12 9.75 15.568z"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <div class="min-w-0 flex-1">
+            <h2 class="truncate text-base font-semibold text-white">
+              {{ youtube.channelTitle || 'YouTube-канал' }}
+            </h2>
+            <p class="mt-0.5 flex items-center gap-2 text-xs text-neutral-400">
+              <span class="inline-flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden />
+              Підключено
+              <a
+                v-if="youtube.channelId"
+                :href="`https://www.youtube.com/channel/${youtube.channelId}`"
+                target="_blank"
+                rel="noreferrer"
+                class="text-neutral-500 hover:text-neutral-300"
+              >
+                відкрити →
+              </a>
             </p>
           </div>
-          <span class="rounded-full bg-green-900/40 px-3 py-1 text-xs font-medium text-green-300">
-            Активний
-          </span>
+
+          <button
+            type="button"
+            :disabled="disconnecting"
+            class="shrink-0 rounded-lg border border-line bg-bg-elevated px-3 py-2 text-xs font-medium text-neutral-300 transition hover:border-red-900/50 hover:bg-red-950/30 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+            @click="onDisconnect"
+          >
+            {{ disconnecting ? '…' : 'Відключити' }}
+          </button>
         </div>
+        <p
+          v-if="disconnectError"
+          class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+        >
+          {{ disconnectError }}
+        </p>
       </section>
 
       <!-- Step 2: Generate clips -->
