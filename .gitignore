@@ -31,3 +31,35 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Agent skills — keep only Claude Code + source
+# (skills CLI створює папки для 30+ інших AI-агентів)
+/.adal
+/.augment
+/.bob
+/.codebuddy
+/.commandcode
+/.continue
+/.cortex
+/.crush
+/.factory
+/.goose
+/.iflow
+/.junie
+/.kilocode
+/.kiro
+/.kode
+/.mcpjam
+/.mux
+/.neovate
+/.openhands
+/.pi
+/.pochi
+/.qoder
+/.qwen
+/.roo
+/.trae
+/.vibe
+/.windsurf
+/.zencoder
+/skills
