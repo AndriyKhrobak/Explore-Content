@@ -10,13 +10,14 @@ datasource db {
 }
 
 model Project {
-  id         String              @id @default(cuid())
-  name       String
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  youtube    YouTubeConnection?
-  jobs       Job[]
-  uploads    Upload[]
+  id           String              @id @default(cuid())
+  name         String
+  description  String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  youtube      YouTubeConnection?
+  jobs         Job[]
+  uploads      Upload[]
 }
 
 model YouTubeConnection {
