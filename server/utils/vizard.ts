@@ -33,27 +33,25 @@ type QueryResponse = {
 };
 
 function apiKey(): string | null {
-  return process.env.VIZARD_API_KEY ?? null;
+  const key = useRuntimeConfig().vizardApiKey;
+  return key && key.length > 0 ? key : null;
 }
 
-export function isConfigured(): boolean {
+export function isVizardConfigured(): boolean {
   return Boolean(apiKey());
 }
 
-export async function createProject(input: {
+export async function vizardCreateProject(input: {
   videoUrl: string;
   maxClips: number;
 }): Promise<{ projectId: string }> {
   const key = apiKey();
   if (!key) throw new Error('VIZARD_API_KEY not configured');
 
-  const res = await fetch(`${VIZARD_BASE}/project/create`, {
+  const res = await $fetch<CreateResponse>(`${VIZARD_BASE}/project/create`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      VIZARDAI_API_KEY: key,
-    },
-    body: JSON.stringify({
+    headers: { 'Content-Type': 'application/json', VIZARDAI_API_KEY: key },
+    body: {
       lang: 'en',
       preferLength: [1, 2],
       videoUrl: input.videoUrl,
@@ -61,33 +59,29 @@ export async function createProject(input: {
       subtitleSwitch: 1,
       headlineSwitch: 1,
       maxClipNumber: input.maxClips * 2,
-    }),
+    },
   });
 
-  const json = (await res.json()) as CreateResponse;
-  if (!json.data?.projectId) {
-    throw new Error(json.message || `Vizard create failed (code ${json.code})`);
+  if (!res.data?.projectId) {
+    throw new Error(res.message || `Vizard create failed (code ${res.code})`);
   }
-  return { projectId: json.data.projectId };
+  return { projectId: res.data.projectId };
 }
 
-export async function getProject(
+export async function vizardGetProject(
   projectId: string,
 ): Promise<{ status: 'processing' | 'ready' | 'failed'; clips: VizardClip[] }> {
   const key = apiKey();
   if (!key) throw new Error('VIZARD_API_KEY not configured');
 
-  const res = await fetch(`${VIZARD_BASE}/project/query/${projectId}`, {
+  const res = await $fetch<QueryResponse>(`${VIZARD_BASE}/project/query/${projectId}`, {
     headers: { VIZARDAI_API_KEY: key },
-    cache: 'no-store',
   });
 
-  const json = (await res.json()) as QueryResponse;
+  if (res.code === 1000) return { status: 'processing', clips: [] };
+  if (res.code !== 2000) return { status: 'failed', clips: [] };
 
-  if (json.code === 1000) return { status: 'processing', clips: [] };
-  if (json.code !== 2000) return { status: 'failed', clips: [] };
-
-  const clips: VizardClip[] = (json.data?.videos ?? []).map((v) => ({
+  const clips: VizardClip[] = (res.data?.videos ?? []).map((v) => ({
     clipId: String(v.videoId ?? v.id ?? ''),
     title: v.title ?? 'Untitled clip',
     viralScore: v.viralScore ?? 0,

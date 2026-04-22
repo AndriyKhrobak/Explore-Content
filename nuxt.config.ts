@@ -1,0 +1,36 @@
+export default defineNuxtConfig({
+  compatibilityDate: '2025-01-01',
+  devtools: { enabled: false },
+  modules: ['@nuxtjs/tailwindcss'],
+  css: ['~/assets/css/tailwind.css'],
+  typescript: { strict: true },
+
+  app: {
+    head: {
+      title: 'Explore Content — AI Shorts Generator',
+      htmlAttrs: { lang: 'uk' },
+      meta: [
+        { charset: 'utf-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        {
+          name: 'description',
+          content:
+            'Нарізає довгі відео на віральні Shorts / TikTok / Reels за допомогою AI.',
+        },
+      ],
+    },
+  },
+
+  runtimeConfig: {
+    vizardApiKey: process.env.VIZARD_API_KEY,
+    googleClientId: process.env.GOOGLE_CLIENT_ID,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
+    demoYoutubeConnect: process.env.DEMO_YOUTUBE_CONNECT === 'true',
+    public: {},
+  },
+
+  nitro: {
+    preset: process.env.VERCEL ? 'vercel' : undefined,
+  },
+});

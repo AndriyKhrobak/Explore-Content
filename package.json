@@ -2,26 +2,33 @@
   "name": "explore-content",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "dev": "nuxt dev",
+    "build": "prisma generate && nuxt build",
+    "generate": "prisma generate && nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare && prisma generate",
+    "typecheck": "nuxt typecheck",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "next": "16.2.4",
-    "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "@prisma/client": "6.2.1",
+    "nuxt": "3.15.2",
+    "vue": "3.5.13",
+    "vue-router": "4.5.0"
   },
   "devDependencies": {
+    "@nuxtjs/tailwindcss": "6.13.1",
     "@types/node": "22.10.10",
-    "@types/react": "19.0.8",
-    "@types/react-dom": "19.0.3",
     "autoprefixer": "10.4.20",
     "postcss": "8.5.1",
+    "prisma": "6.2.1",
     "tailwindcss": "3.4.17",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "vue-tsc": "2.2.0"
   },
   "engines": {
     "node": ">=18.18.0"

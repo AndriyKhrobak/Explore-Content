@@ -2,15 +2,18 @@
 .env.local
 .env.*.local
 
-# Node / Next.js
+# Node / Nuxt
 node_modules/
-.next/
-out/
-next-env.d.ts.backup
+.nuxt/
+.output/
+dist/
 *.tsbuildinfo
 
 # Vercel
 .vercel
+
+# Prisma
+prisma/migrations/**/migration.sql.backup
 
 # n8n
 .n8n/

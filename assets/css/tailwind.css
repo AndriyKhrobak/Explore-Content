@@ -6,7 +6,6 @@
   html,
   body {
     @apply bg-bg-base text-neutral-200 antialiased;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';
   }
 
   ::selection {

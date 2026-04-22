@@ -1,16 +1,21 @@
-import { NextResponse } from 'next/server';
-import { getProject } from '@/lib/projects';
+export default defineEventHandler(async (event) => {
+  const id = getRouterParam(event, 'id');
+  if (!id) throw createError({ statusCode: 400, statusMessage: 'id required' });
 
-export const runtime = 'nodejs';
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: {
+      youtube: true,
+      jobs: { orderBy: { createdAt: 'asc' } },
+      uploads: { orderBy: { createdAt: 'asc' } },
+    },
+  });
 
-export async function GET(_request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const project = getProject(id);
   if (!project) {
-    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    throw createError({ statusCode: 404, statusMessage: 'Project not found' });
   }
 
-  return NextResponse.json({
+  return {
     id: project.id,
     name: project.name,
     createdAt: project.createdAt,
@@ -31,5 +36,5 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
       createdAt: j.createdAt,
     })),
     uploads: project.uploads,
-  });
-}
+  };
+});

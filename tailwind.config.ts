@@ -2,8 +2,9 @@ import type { Config } from 'tailwindcss';
 
 export default {
   content: [
-    './app/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
+    './components/**/*.{vue,ts}',
+    './pages/**/*.{vue,ts}',
+    './app.vue',
   ],
   theme: {
     extend: {
@@ -26,9 +27,6 @@ export default {
       backgroundImage: {
         'hero-glow':
           'radial-gradient(ellipse 80% 60% at 50% -20%, rgba(124,58,237,0.35), transparent 70%)',
-      },
-      animation: {
-        pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },
