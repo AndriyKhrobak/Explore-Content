@@ -1,0 +1,480 @@
+{
+  "name": "Clip Video to Shorts (Vizard → YT/TT/IG)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clip-video",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-1600, 0],
+      "webhookId": "clip-video"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "videoUrl",
+              "value": "={{ $json.body.videoUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "platforms",
+              "value": "={{ $json.body.platforms || ['youtube', 'tiktok', 'instagram'] }}",
+              "type": "array"
+            },
+            {
+              "id": "3",
+              "name": "maxClips",
+              "value": "={{ $json.body.maxClips ?? 3 }}",
+              "type": "number"
+            },
+            {
+              "id": "4",
+              "name": "minViralScore",
+              "value": "={{ $json.body.minViralScore ?? 80 }}",
+              "type": "number"
+            },
+            {
+              "id": "5",
+              "name": "context",
+              "value": "={{ $json.body.context || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-inputs",
+      "name": "Extract Inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://elb-api.vizard.ai/hvizard-server-front/open-api/v1/project/create",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lang\": \"en\",\n  \"preferLength\": [1, 2],\n  \"videoUrl\": \"{{ $json.videoUrl }}\",\n  \"videoType\": 2,\n  \"subtitleSwitch\": 1,\n  \"headlineSwitch\": 1,\n  \"maxClipNumber\": {{ $json.maxClips * 2 }}\n}",
+        "options": {}
+      },
+      "id": "vizard-create",
+      "name": "Vizard: Create Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-1200, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vizard-header-auth",
+          "name": "Vizard API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "projectId",
+              "value": "={{ $json.data.projectId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "store-project-id",
+      "name": "Store projectId",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1000, 0]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "wait-poll",
+      "name": "Wait 60s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [-800, 0],
+      "webhookId": "wait-poll"
+    },
+    {
+      "parameters": {
+        "url": "=https://elb-api.vizard.ai/hvizard-server-front/open-api/v1/project/query/{{ $('Store projectId').item.json.projectId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "vizard-status",
+      "name": "Vizard: Get Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-600, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vizard-header-auth",
+          "name": "Vizard API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "status-complete",
+              "leftValue": "={{ $json.code }}",
+              "rightValue": 2000,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-complete",
+      "name": "Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Vizard response → array of clips.\n// data.videos is the list; each has viralScore (0-100), videoUrl, title, startSec, endSec.\nconst response = $input.first().json;\nconst videos = response?.data?.videos || [];\n\nconst inputs = $('Extract Inputs').first().json;\nconst minScore = inputs.minViralScore ?? 80;\nconst maxClips = inputs.maxClips ?? 3;\nconst platforms = inputs.platforms;\n\nconst ranked = videos\n  .filter(v => (v.viralScore ?? 0) >= minScore)\n  .sort((a, b) => (b.viralScore ?? 0) - (a.viralScore ?? 0))\n  .slice(0, maxClips);\n\nreturn ranked.map(clip => ({\n  json: {\n    clipId: clip.videoId || clip.id,\n    clipUrl: clip.videoUrl,\n    title: clip.title || `Clip ${clip.videoId}`,\n    caption: clip.title || '',\n    viralScore: clip.viralScore,\n    startSec: clip.startSec,\n    endSec: clip.endSec,\n    durationSec: (clip.endSec ?? 0) - (clip.startSec ?? 0),\n    platforms,\n  },\n}));"
+      },
+      "id": "filter-clips",
+      "name": "Filter Top Clips",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, -200]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-clips",
+      "name": "Loop Over Clips",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [0, -200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.clipUrl }}",
+        "options": {
+          "response": {
+            "response": { "responseFormat": "file", "outputPropertyName": "data" }
+          }
+        }
+      },
+      "id": "download-clip",
+      "name": "Download Clip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [200, -200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-youtube",
+              "leftValue": "={{ $json.platforms }}",
+              "rightValue": "youtube",
+              "operator": { "type": "array", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-youtube",
+      "name": "Upload to YouTube?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [400, -400]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $json.title }}",
+        "regionCode": "US",
+        "categoryId": "22",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ $json.caption }}\n\n#shorts",
+          "privacyStatus": "public",
+          "notifySubscribers": false,
+          "selfDeclaredMadeForKids": false,
+          "tags": "shorts,viral,ai-clipped"
+        }
+      },
+      "id": "youtube-upload",
+      "name": "YouTube: Upload Short",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [600, -500],
+      "credentials": {
+        "youTubeOAuth2Api": { "id": "youtube-oauth", "name": "YouTube OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-tiktok",
+              "leftValue": "={{ $json.platforms }}",
+              "rightValue": "tiktok",
+              "operator": { "type": "array", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-tiktok",
+      "name": "Upload to TikTok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [400, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source_info\": {\n    \"source\": \"PULL_FROM_URL\",\n    \"video_url\": \"{{ $json.clipUrl }}\"\n  }\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "options": {}
+      },
+      "id": "tiktok-init",
+      "name": "TikTok: Init Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [600, -200],
+      "credentials": {
+        "oAuth2Api": { "id": "tiktok-oauth", "name": "TikTok OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-instagram",
+              "leftValue": "={{ $json.platforms }}",
+              "rightValue": "instagram",
+              "operator": { "type": "array", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-instagram",
+      "name": "Upload to Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $env.INSTAGRAM_BUSINESS_ACCOUNT_ID }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "media_type", "value": "REELS" },
+            { "name": "video_url", "value": "={{ $json.clipUrl }}" },
+            { "name": "caption", "value": "={{ $json.caption }}" },
+            { "name": "share_to_feed", "value": "true" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "instagram-create",
+      "name": "Instagram: Create Reel Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [600, 0],
+      "credentials": {
+        "oAuth2Api": { "id": "instagram-oauth", "name": "Instagram OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 45,
+        "unit": "seconds"
+      },
+      "id": "ig-wait",
+      "name": "IG: Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [800, 0],
+      "webhookId": "ig-wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $env.INSTAGRAM_BUSINESS_ACCOUNT_ID }}/media_publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "creation_id", "value": "={{ $json.id }}" }]
+        },
+        "options": {}
+      },
+      "id": "instagram-publish",
+      "name": "Instagram: Publish Reel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1000, 0],
+      "credentials": {
+        "oAuth2Api": { "id": "instagram-oauth", "name": "Instagram OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge Per-Clip Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [1200, -200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"ok\",\n  \"projectId\": \"{{ $('Store projectId').item.json.projectId }}\",\n  \"clipsProcessed\": {{ $items().length }},\n  \"clips\": {{ JSON.stringify($items().map(i => ({ title: i.json.title, viralScore: i.json.viralScore }))) }}\n}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1400, -200]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Extract Inputs", "type": "main", "index": 0 }]]
+    },
+    "Extract Inputs": {
+      "main": [[{ "node": "Vizard: Create Project", "type": "main", "index": 0 }]]
+    },
+    "Vizard: Create Project": {
+      "main": [[{ "node": "Store projectId", "type": "main", "index": 0 }]]
+    },
+    "Store projectId": {
+      "main": [[{ "node": "Wait 60s", "type": "main", "index": 0 }]]
+    },
+    "Wait 60s": {
+      "main": [[{ "node": "Vizard: Get Status", "type": "main", "index": 0 }]]
+    },
+    "Vizard: Get Status": {
+      "main": [[{ "node": "Ready?", "type": "main", "index": 0 }]]
+    },
+    "Ready?": {
+      "main": [
+        [{ "node": "Filter Top Clips", "type": "main", "index": 0 }],
+        [{ "node": "Wait 60s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Top Clips": {
+      "main": [[{ "node": "Loop Over Clips", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Clips": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }],
+        [{ "node": "Download Clip", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Clip": {
+      "main": [
+        [
+          { "node": "Upload to YouTube?", "type": "main", "index": 0 },
+          { "node": "Upload to TikTok?", "type": "main", "index": 0 },
+          { "node": "Upload to Instagram?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Upload to YouTube?": {
+      "main": [
+        [{ "node": "YouTube: Upload Short", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Upload to TikTok?": {
+      "main": [
+        [{ "node": "TikTok: Init Upload", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Upload to Instagram?": {
+      "main": [
+        [{ "node": "Instagram: Create Reel Container", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Instagram: Create Reel Container": {
+      "main": [[{ "node": "IG: Wait for Processing", "type": "main", "index": 0 }]]
+    },
+    "IG: Wait for Processing": {
+      "main": [[{ "node": "Instagram: Publish Reel", "type": "main", "index": 0 }]]
+    },
+    "YouTube: Upload Short": {
+      "main": [[{ "node": "Merge Per-Clip Results", "type": "main", "index": 0 }]]
+    },
+    "TikTok: Init Upload": {
+      "main": [[{ "node": "Merge Per-Clip Results", "type": "main", "index": 1 }]]
+    },
+    "Instagram: Publish Reel": {
+      "main": [[{ "node": "Merge Per-Clip Results", "type": "main", "index": 0 }]]
+    },
+    "Merge Per-Clip Results": {
+      "main": [[{ "node": "Loop Over Clips", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "1",
+  "tags": ["shorts", "vizard", "youtube", "tiktok", "instagram"]
+}
