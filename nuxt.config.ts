@@ -17,6 +17,10 @@ export default defineNuxtConfig({
           content:
             'Нарізає довгі відео на віральні Shorts / TikTok / Reels за допомогою AI.',
         },
+        {
+          name: 'tiktok-developers-site-verification',
+          content: '7Tj0y7Yu4ou9JLGKNGnFG3x34NoTDbaY',
+        },
       ],
     },
   },
