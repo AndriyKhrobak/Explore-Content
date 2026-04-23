@@ -32,7 +32,6 @@ type Upload = {
 type Project = {
   id: string;
   name: string;
-  description: string | null;
   createdAt: string;
   youtube: {
     connected: boolean;
@@ -111,50 +110,6 @@ async function saveName() {
     nameError.value = err instanceof Error ? err.message : 'Не вдалося зберегти';
   } finally {
     savingName.value = false;
-  }
-}
-
-// === Inline edit of project description ===
-const editingDesc = ref(false);
-const editedDesc = ref('');
-const savingDesc = ref(false);
-const descError = ref<string | null>(null);
-const descInputRef = ref<HTMLTextAreaElement | null>(null);
-
-function startEditDesc() {
-  editedDesc.value = project.value?.description ?? '';
-  descError.value = null;
-  editingDesc.value = true;
-  nextTick(() => {
-    descInputRef.value?.focus();
-  });
-}
-
-function cancelEditDesc() {
-  editingDesc.value = false;
-  descError.value = null;
-}
-
-async function saveDesc() {
-  const next = editedDesc.value.trim();
-  const current = project.value?.description ?? '';
-  if (next === current) {
-    cancelEditDesc();
-    return;
-  }
-  savingDesc.value = true;
-  descError.value = null;
-  try {
-    await $fetch(`/api/projects/${projectId.value}`, {
-      method: 'PATCH',
-      body: { description: next.length === 0 ? null : next },
-    });
-    await refresh();
-    editingDesc.value = false;
-  } catch (err) {
-    descError.value = err instanceof Error ? err.message : 'Не вдалося зберегти';
-  } finally {
-    savingDesc.value = false;
   }
 }
 
@@ -425,79 +380,6 @@ function scoreColor(score: number) {
           class="mt-2 text-xs text-red-400"
         >
           {{ nameError }}
-        </p>
-
-        <!-- Description -->
-        <div v-if="!editingDesc" class="group mt-3 flex items-start gap-2">
-          <p
-            v-if="project!.description"
-            class="max-w-2xl text-sm leading-relaxed text-neutral-400"
-          >
-            {{ project!.description }}
-          </p>
-          <button
-            v-else
-            type="button"
-            class="text-sm text-neutral-500 transition hover:text-neutral-300"
-            @click="startEditDesc"
-          >
-            + Додати опис
-          </button>
-          <button
-            v-if="project!.description"
-            type="button"
-            class="mt-0.5 rounded-md p-1 text-neutral-500 opacity-0 transition hover:bg-bg-panel hover:text-white group-hover:opacity-100 focus:opacity-100"
-            aria-label="Редагувати опис"
-            @click="startEditDesc"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-          </button>
-        </div>
-
-        <form v-else class="mt-3" @submit.prevent="saveDesc">
-          <textarea
-            ref="descInputRef"
-            v-model="editedDesc"
-            rows="3"
-            maxlength="500"
-            placeholder="Короткий опис проекту — тема, джерела контенту, цілі…"
-            :disabled="savingDesc"
-            class="w-full resize-y rounded-lg border border-accent bg-bg-elevated px-3 py-2 text-sm text-neutral-100 outline-none focus:ring-2 focus:ring-accent/30"
-            @keydown.meta.enter="saveDesc"
-            @keydown.ctrl.enter="saveDesc"
-            @keydown.esc="cancelEditDesc"
-          />
-          <div class="mt-2 flex items-center justify-between gap-3">
-            <span class="text-xs text-neutral-500">
-              {{ editedDesc.length }} / 500 · ⌘+Enter зберегти, Esc скасувати
-            </span>
-            <div class="flex gap-2">
-              <button
-                type="button"
-                :disabled="savingDesc"
-                class="rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs text-neutral-300 transition hover:border-neutral-600"
-                @click="cancelEditDesc"
-              >
-                Скасувати
-              </button>
-              <button
-                type="submit"
-                :disabled="savingDesc"
-                class="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition enabled:hover:bg-accent-glow disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {{ savingDesc ? '…' : 'Зберегти' }}
-              </button>
-            </div>
-          </div>
-        </form>
-        <p
-          v-if="descError"
-          class="mt-2 text-xs text-red-400"
-        >
-          {{ descError }}
         </p>
       </header>
 

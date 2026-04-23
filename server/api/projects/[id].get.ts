@@ -18,7 +18,6 @@ export default defineEventHandler(async (event) => {
   return {
     id: project.id,
     name: project.name,
-    description: project.description,
     createdAt: project.createdAt,
     youtube: project.youtube
       ? {
