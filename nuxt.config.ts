@@ -19,7 +19,7 @@ export default defineNuxtConfig({
         },
         {
           name: 'tiktok-developers-site-verification',
-          content: '7Tj0y7Yu4ou9JLGKNGnFG3x34NoTDbaY',
+          content: 'Gd9p8DQsdFMrP9HwIhORdHDGiqD9lvUW',
         },
       ],
     },
