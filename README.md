@@ -143,6 +143,46 @@ units/день (~6 upload/день). Працює з 1-100 акаунтами б
 використовуються для проектів, де у БД немає власних креденшалів. Зручно
 для локальної розробки під одним акаунтом без зайвої возні з UI.
 
+## Auto-publish cron (через Supabase pg_cron)
+
+Vercel Hobby plan дозволяє cron лише раз на добу. Тому `vercel.json`
+**не використовується** — замість цього cron запускається з самого
+Postgres через `pg_cron` + `pg_net` (доступні навіть на Free plan).
+
+Одноразове налаштування у Supabase:
+
+1. **Dashboard → Database → Extensions** → enable **`pg_cron`** і **`pg_net`**.
+2. **SQL Editor → New query** → запусти SQL нижче, замінивши значення
+   на свої:
+
+   ```sql
+   -- замініть BASE_URL на ваш домен Vercel
+   -- замініть SECRET на значення CRON_SECRET з Vercel env vars
+   SELECT cron.schedule(
+     'process-uploads-every-minute',
+     '* * * * *',
+     $$
+     SELECT net.http_get(
+       url := 'https://YOUR-DOMAIN.vercel.app/api/cron/process-uploads',
+       headers := '{"Authorization": "Bearer YOUR_CRON_SECRET"}'::jsonb
+     );
+     $$
+   );
+   ```
+
+3. Перевірити що працює:
+   ```sql
+   SELECT * FROM cron.job;                   -- має бути 1 рядок
+   SELECT * FROM cron.job_run_details        -- історія запусків
+   ORDER BY start_time DESC LIMIT 10;
+   ```
+
+4. У Vercel **Settings → Environment Variables** додати
+   `CRON_SECRET = <те саме значення що в SQL вище>`. Без нього
+   endpoint доступний публічно (працюватиме, але без захисту).
+
+Зупинити cron можна так: `SELECT cron.unschedule('process-uploads-every-minute');`
+
 ## API
 
 | Метод | Шлях | Опис |
