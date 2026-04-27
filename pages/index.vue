@@ -23,6 +23,22 @@ const projects = computed(() => projectsData.value?.projects ?? []);
 const name = ref('');
 const submitting = ref(false);
 const errorMsg = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
+
+async function onDeleteProject(p: ProjectListItem, ev: Event) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (!confirm(`Видалити проект "${p.name}"? Усі кліпи та публікації зникнуть.`)) return;
+  deletingId.value = p.id;
+  try {
+    await $fetch(`/api/projects/${p.id}`, { method: 'DELETE' });
+    await refreshNuxtData('landing-projects');
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Не вдалося видалити');
+  } finally {
+    deletingId.value = null;
+  }
+}
 
 async function onSubmit() {
   errorMsg.value = null;
@@ -154,6 +170,31 @@ function formatDate(iso: string) {
                   <span v-if="p.uploadsCount > 0" class="ml-2">· {{ p.uploadsCount }} upload{{ p.uploadsCount === 1 ? '' : 's' }}</span>
                 </p>
               </div>
+              <button
+                type="button"
+                :disabled="deletingId === p.id"
+                aria-label="Видалити проект"
+                title="Видалити проект"
+                class="shrink-0 rounded-md p-1.5 text-neutral-600 opacity-0 transition hover:bg-red-950/30 hover:text-red-300 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="onDeleteProject(p, $event)"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-2 14H7L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4h6v2" />
+                </svg>
+              </button>
               <span class="shrink-0 text-neutral-600 transition group-hover:translate-x-0.5 group-hover:text-accent-glow">
                 →
               </span>

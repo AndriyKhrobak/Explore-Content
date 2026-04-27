@@ -18,15 +18,17 @@ export default defineEventHandler(async (event) => {
   if (!project) throw createError({ statusCode: 404, statusMessage: 'Project not found' });
 
   if (!isVizardConfigured()) {
+    const clips = mockClips(3);
     const job = await prisma.job.create({
       data: {
         projectId,
         videoUrl,
         status: 'ready',
         mock: true,
-        clips: mockClips(3) as unknown as object,
+        clips: clips as unknown as object,
       },
     });
+    await scheduleClipsForJob({ projectId, jobId: job.id, clips });
     return { id: job.id, mock: true };
   }
 
