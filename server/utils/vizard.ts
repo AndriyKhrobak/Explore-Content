@@ -168,9 +168,9 @@ export async function vizardGetProject(
   const sampleVideos = extractVideosArray(res);
   if (sampleVideos.length > 0) {
     console.log('[vizard.query] sample clip keys:', Object.keys(sampleVideos[0] as object));
-    console.log('[vizard.query] sample clip:', JSON.stringify(sampleVideos[0]).slice(0, 500));
+    console.log('[vizard.query] sample clip:', String(JSON.stringify(sampleVideos[0])).slice(0, 500));
   } else {
-    console.log('[vizard.query] no videos in response. data:', JSON.stringify(res.data).slice(0, 500));
+    console.log('[vizard.query] no videos in response. data:', String(JSON.stringify(res.data)).slice(0, 500));
   }
 
   // Vizard status codes: 1000=processing, 2000=ready. Everything else = failed.
@@ -180,7 +180,7 @@ export async function vizardGetProject(
   const clips = sampleVideos.map(normalizeClip).filter((c) => c.videoUrl);
 
   if (clips.length === 0) {
-    console.warn('[vizard.query] code=2000 but 0 clips parsed. Full data:', JSON.stringify(res.data));
+    console.warn('[vizard.query] code=2000 but 0 clips parsed. Full data:', String(JSON.stringify(res.data)));
   }
 
   return { status: 'ready', clips };
