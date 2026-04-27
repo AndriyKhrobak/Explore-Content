@@ -145,10 +145,14 @@ function formatDate(iso: string) {
         </div>
 
         <ul class="space-y-2">
-          <li v-for="p in projects" :key="p.id">
+          <li
+            v-for="p in projects"
+            :key="p.id"
+            class="group relative flex items-center gap-2 rounded-lg border border-line bg-bg-panel/40 transition hover:border-accent hover:bg-bg-panel/80"
+          >
             <NuxtLink
               :to="`/project/${p.id}`"
-              class="group flex items-center gap-4 rounded-lg border border-line bg-bg-panel/40 px-4 py-3 transition hover:border-accent hover:bg-bg-panel/80"
+              class="flex min-w-0 flex-1 items-center gap-4 px-4 py-3"
             >
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
@@ -170,35 +174,35 @@ function formatDate(iso: string) {
                   <span v-if="p.uploadsCount > 0" class="ml-2">· {{ p.uploadsCount }} upload{{ p.uploadsCount === 1 ? '' : 's' }}</span>
                 </p>
               </div>
-              <button
-                type="button"
-                :disabled="deletingId === p.id"
-                aria-label="Видалити проект"
-                title="Видалити проект"
-                class="shrink-0 rounded-md p-1.5 text-neutral-600 opacity-0 transition hover:bg-red-950/30 hover:text-red-300 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-                @click="onDeleteProject(p, $event)"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-2 14H7L5 6" />
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M9 6V4h6v2" />
-                </svg>
-              </button>
               <span class="shrink-0 text-neutral-600 transition group-hover:translate-x-0.5 group-hover:text-accent-glow">
                 →
               </span>
             </NuxtLink>
+            <button
+              type="button"
+              :disabled="deletingId === p.id"
+              aria-label="Видалити проект"
+              title="Видалити проект"
+              class="mr-2 shrink-0 rounded-md p-2 text-neutral-500 transition hover:bg-red-950/30 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              @click="onDeleteProject(p, $event)"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-2 14H7L5 6" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+            </button>
           </li>
         </ul>
       </section>
