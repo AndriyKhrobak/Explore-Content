@@ -10,27 +10,50 @@ const SCOPES = [
   'https://www.googleapis.com/auth/youtube.readonly',
 ].join(' ');
 
+export type OAuthCreds = {
+  clientId: string;
+  clientSecret: string;
+};
+
 function cfg() {
   return useRuntimeConfig();
 }
 
-export function isOAuthConfigured(): boolean {
+export function isEnvOAuthConfigured(): boolean {
   const c = cfg();
   return Boolean(c.googleClientId && c.googleClientSecret);
 }
 
 export function isDemoConnectEnabled(): boolean {
-  return cfg().demoYoutubeConnect === true || !isOAuthConfigured();
+  return cfg().demoYoutubeConnect === true;
+}
+
+function envCreds(): OAuthCreds | null {
+  const c = cfg();
+  if (!c.googleClientId || !c.googleClientSecret) return null;
+  return {
+    clientId: c.googleClientId as string,
+    clientSecret: c.googleClientSecret as string,
+  };
+}
+
+/**
+ * Resolve OAuth credentials for a project: per-project DB row wins, then
+ * env-var fallback (legacy / demo). Returns null when neither is set.
+ */
+export async function getProjectOAuthCreds(projectId: string): Promise<OAuthCreds | null> {
+  const row = await prisma.googleClientCredentials.findUnique({ where: { projectId } });
+  if (row) return { clientId: row.clientId, clientSecret: row.clientSecret };
+  return envCreds();
 }
 
 function redirectUri(origin: string): string {
   return cfg().googleRedirectUri || `${origin}/api/youtube/callback`;
 }
 
-export function buildAuthUrl(origin: string, state: string): string {
-  const c = cfg();
+export function buildAuthUrl(origin: string, state: string, creds: OAuthCreds): string {
   const params = new URLSearchParams({
-    client_id: c.googleClientId as string,
+    client_id: creds.clientId,
     redirect_uri: redirectUri(origin),
     response_type: 'code',
     scope: SCOPES,
@@ -59,15 +82,18 @@ type ExchangedTokens = {
   channelThumbnailUrl?: string;
 };
 
-export async function exchangeCode(origin: string, code: string): Promise<ExchangedTokens> {
-  const c = cfg();
+export async function exchangeCode(
+  origin: string,
+  code: string,
+  creds: OAuthCreds,
+): Promise<ExchangedTokens> {
   const tokens = await $fetch<TokenResponse>(GOOGLE_TOKEN, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: c.googleClientId as string,
-      client_secret: c.googleClientSecret as string,
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
       redirect_uri: redirectUri(origin),
       grant_type: 'authorization_code',
     }).toString(),
@@ -85,16 +111,18 @@ export async function exchangeCode(origin: string, code: string): Promise<Exchan
   };
 }
 
-export async function refreshAccessToken(conn: YouTubeConnection): Promise<ExchangedTokens> {
+export async function refreshAccessToken(
+  conn: YouTubeConnection,
+  creds: OAuthCreds,
+): Promise<ExchangedTokens> {
   if (!conn.refreshToken) throw new Error('No refresh token stored');
-  const c = cfg();
 
   const tokens = await $fetch<TokenResponse>(GOOGLE_TOKEN, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: c.googleClientId as string,
-      client_secret: c.googleClientSecret as string,
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
       refresh_token: conn.refreshToken,
       grant_type: 'refresh_token',
     }).toString(),
@@ -164,11 +192,12 @@ export async function revokeToken(token: string): Promise<void> {
 
 export async function ensureFreshToken(
   conn: YouTubeConnection,
+  creds: OAuthCreds,
 ): Promise<{ accessToken: string }> {
   if (conn.expiresAt.getTime() - Date.now() > 60_000) {
     return { accessToken: conn.accessToken };
   }
-  const fresh = await refreshAccessToken(conn);
+  const fresh = await refreshAccessToken(conn, creds);
   await prisma.youTubeConnection.update({
     where: { id: conn.id },
     data: { accessToken: fresh.accessToken, expiresAt: fresh.expiresAt },
@@ -178,13 +207,14 @@ export async function ensureFreshToken(
 
 export async function uploadVideoToYouTube(input: {
   connection: YouTubeConnection;
+  creds: OAuthCreds;
   clipUrl: string;
   title: string;
   description: string;
   tags?: string[];
   privacyStatus?: 'public' | 'unlisted' | 'private';
 }): Promise<{ videoId: string; url: string }> {
-  const { accessToken } = await ensureFreshToken(input.connection);
+  const { accessToken } = await ensureFreshToken(input.connection, input.creds);
 
   const clipRes = await fetch(input.clipUrl);
   if (!clipRes.ok) throw new Error(`Failed to download clip (HTTP ${clipRes.status})`);

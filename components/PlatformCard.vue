@@ -104,12 +104,18 @@ const LABELS: Record<Platform, string> = {
         </span>
 
         <a
-          v-else-if="connectHref"
+          v-else-if="connectHref && !disabled"
           :href="connectHref"
           class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-accent/30 transition hover:bg-accent-glow"
         >
           Підключити
         </a>
+        <span
+          v-else-if="connectHref && disabled"
+          class="inline-flex items-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-xs font-semibold text-neutral-500"
+        >
+          Підключити
+        </span>
       </div>
     </div>
   </section>

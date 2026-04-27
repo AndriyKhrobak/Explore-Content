@@ -98,22 +98,50 @@ vercel env pull       # підтягує env vars у .env.local
 vercel --prod         # prod-деплой
 ```
 
-## Google OAuth (для реального YouTube upload)
+## Google OAuth (BYO Client — рекомендований шлях)
 
-1. https://console.cloud.google.com → `New Project`.
+Ідея: **кожен YouTube-акаунт = окремий проект у Google Cloud**, у Testing
+mode, де власник цього GCP-проекту сам собі test user. Це обходить
+вимогу Google verification + дає кожному акаунту власну квоту 10k
+units/день (~6 upload/день). Працює з 1-100 акаунтами без сторонніх
+аудитів.
+
+Для **кожного** YouTube-акаунту повторити:
+
+1. https://console.cloud.google.com → `New Project` (наприклад `yt-acc-01`).
 2. `APIs & Services → Library` → enable **YouTube Data API v3**.
 3. `APIs & Services → OAuth consent screen`:
-   - User Type: External
-   - App name, support email — заповніть мінімум
+   - User Type: **External**
+   - App name, support email
    - Scopes → додайте `.../auth/youtube.upload` + `.../auth/youtube.readonly`
-   - Test users → додайте свій Gmail (без цього Google не пустить поки
-     не пройдете review)
-4. `APIs & Services → Credentials → Create OAuth client ID`:
+   - **Test users** → додайте Gmail-адресу цього YouTube-акаунту
+4. `APIs & Services → Credentials → Create credentials → OAuth client ID`:
    - Type: **Web application**
    - Authorized redirect URIs:
      - `http://localhost:3000/api/youtube/callback`
      - `https://<your-vercel-url>/api/youtube/callback`
-5. `Client ID` + `Client secret` → у env.
+5. Скопіюйте `Client ID` + `Client secret`.
+6. У застосунку → створіть Project → форма **"Google OAuth credentials"** на
+   сторінці проекту → вставте обидва значення → `Зберегти`.
+7. Натисніть `Підключити YouTube` → пройдіть OAuth під цим Gmail.
+
+Креденшали зберігаються у БД (`GoogleClientCredentials`) і
+завантажуються per-project під час OAuth + upload. Видалити можна
+через UI (тільки після `Disconnect`).
+
+### Обмеження Testing mode
+
+- **Refresh token живе 7 днів** → раз на тиждень треба перепідключати
+  кожен акаунт. Production verification знімає це, але для
+  `youtube.upload` потрібен платний CASA-аудит ($).
+- На consent screen юзер бачить попередження "App not verified" →
+  `Advanced → Go to ... (unsafe)`.
+
+### Env-fallback (опційно)
+
+Якщо у `.env` задані `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` — вони
+використовуються для проектів, де у БД немає власних креденшалів. Зручно
+для локальної розробки під одним акаунтом без зайвої возні з UI.
 
 ## API
 
@@ -123,6 +151,8 @@ vercel --prod         # prod-деплой
 | GET   | `/api/projects/:id` | Стан проекту + кліпи + uploads |
 | GET   | `/api/youtube/connect?projectId=` | → Google OAuth (або демо) |
 | GET   | `/api/youtube/callback` | OAuth callback → `/project/:id` |
+| POST  | `/api/youtube/credentials` | Зберегти Client ID/Secret для проекту |
+| DELETE | `/api/youtube/credentials` | Видалити (вимагає Disconnect спершу) |
 | POST  | `/api/clip/start` | Vizard create (`{ projectId, videoUrl, maxClips }`) |
 | GET   | `/api/clip/status?projectId=&id=` | Поллінг Vizard |
 | POST  | `/api/clip/upload` | Upload у YT (`{ projectId, jobId, clipIds[], privacyStatus }`) |
@@ -146,7 +176,8 @@ server/
     ├── vizard.ts               — Vizard API + mock
     └── youtube.ts              — OAuth + Data API upload
 prisma/
-└── schema.prisma               — Project, YouTubeConnection, Job, Upload
+└── schema.prisma               — Project, GoogleClientCredentials,
+                                  YouTubeConnection, Job, Upload
 workflows/
 └── clip-video-to-shorts.json   — (legacy) n8n workflow для TikTok+IG
 docs/
