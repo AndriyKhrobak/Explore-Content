@@ -28,9 +28,6 @@ export default defineEventHandler(async (event) => {
       where: { id: jobId },
       data: { status, clips: clips as unknown as object },
     });
-    if (status === 'ready' && clips.length > 0) {
-      await scheduleClipsForJob({ projectId, jobId, clips });
-    }
     return publicView(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
