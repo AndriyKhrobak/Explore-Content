@@ -31,7 +31,6 @@ export default defineNuxtConfig({
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     demoYoutubeConnect: process.env.DEMO_YOUTUBE_CONNECT === 'true',
-    cronSecret: process.env.CRON_SECRET,
     public: {},
   },
 

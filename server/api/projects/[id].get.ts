@@ -45,16 +45,7 @@ export default defineEventHandler(async (event) => {
       error: j.error,
       createdAt: j.createdAt,
     })),
-    uploads: project.uploads.map((u) => ({
-      id: u.id,
-      clipId: u.clipId,
-      status: u.status,
-      scheduledAt: u.scheduledAt,
-      youtubeVideoId: u.youtubeVideoId,
-      youtubeUrl: u.youtubeUrl,
-      error: u.error,
-      createdAt: u.createdAt,
-    })),
+    uploads: project.uploads,
   };
 });
 

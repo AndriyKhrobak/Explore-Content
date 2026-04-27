@@ -22,8 +22,7 @@ type Job = {
 type Upload = {
   id: string;
   clipId: string;
-  status: 'scheduled' | 'pending' | 'uploading' | 'completed' | 'failed';
-  scheduledAt: string | null;
+  status: 'pending' | 'uploading' | 'completed' | 'failed';
   youtubeVideoId: string | null;
   youtubeUrl: string | null;
   error: string | null;
@@ -220,12 +219,6 @@ async function syncStatus() {
   }
 }
 
-const hasActiveQueue = computed(() =>
-  (project.value?.uploads ?? []).some(
-    (u) => u.status === 'scheduled' || u.status === 'uploading',
-  ),
-);
-
 watchEffect(() => {
   if (pollHandle) {
     clearInterval(pollHandle);
@@ -235,22 +228,13 @@ watchEffect(() => {
     clearInterval(tickHandle);
     tickHandle = null;
   }
-  const isProcessing = latestJob.value?.status === 'processing';
-  if (isProcessing) {
+  if (latestJob.value?.status === 'processing') {
     // Kick an immediate sync on mount/reload — important for users who come
     // back after closing the tab. The DB might be stale even if Vizard finished.
     void syncStatus();
     pollHandle = setInterval(() => {
       void syncStatus();
     }, 10000);
-  } else if (hasActiveQueue.value) {
-    // Cron does the actual work; we just refresh the project view to reflect
-    // status changes (scheduled → uploading → completed).
-    pollHandle = setInterval(() => {
-      void refresh();
-    }, 15000);
-  }
-  if (isProcessing || hasActiveQueue.value) {
     tickHandle = setInterval(() => {
       now.value = Date.now();
     }, 1000);
@@ -262,22 +246,44 @@ onBeforeUnmount(() => {
   if (tickHandle) clearInterval(tickHandle);
 });
 
-// === Auto-publish queue ===
-// Vizard finishes → backend creates Upload rows with status='scheduled' and
-// staggered scheduledAt (now, +30m, +60m, ...). Vercel Cron processes them.
+// === Clip selection + upload ===
+const selected = ref<Set<string>>(new Set());
+const privacy = ref<'public' | 'unlisted' | 'private'>('private');
+const uploading = ref(false);
+const uploadError = ref<string | null>(null);
+
+function toggleClip(clipId: string) {
+  const next = new Set(selected.value);
+  if (next.has(clipId)) next.delete(clipId);
+  else next.add(clipId);
+  selected.value = next;
+}
+
 function uploadForClip(clipId: string): Upload | undefined {
   return uploads.value.find((u) => u.clipId === clipId);
 }
 
-function untilScheduled(iso: string | null): string {
-  if (!iso) return '';
-  const ms = new Date(iso).getTime() - now.value;
-  if (ms <= 0) return 'зараз';
-  const totalMin = Math.ceil(ms / 60000);
-  if (totalMin < 60) return `через ${totalMin} хв`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return m === 0 ? `через ${h} год` : `через ${h} год ${m} хв`;
+async function onUpload() {
+  if (!latestJob.value || selected.value.size === 0) return;
+  uploadError.value = null;
+  uploading.value = true;
+  try {
+    await $fetch('/api/clip/upload', {
+      method: 'POST',
+      body: {
+        projectId: projectId.value,
+        jobId: latestJob.value.id,
+        clipIds: Array.from(selected.value),
+        privacyStatus: privacy.value,
+      },
+    });
+    selected.value = new Set();
+    await refresh();
+  } catch (err: unknown) {
+    uploadError.value = err instanceof Error ? err.message : 'Upload failed';
+  } finally {
+    uploading.value = false;
+  }
 }
 
 // === Delete project ===
@@ -590,25 +596,32 @@ function scoreColor(score: number) {
         </div>
       </section>
 
-      <!-- Step 3: Auto-publish queue -->
+      <!-- Step 3: Select & upload clips -->
       <section
         v-if="latestJob?.status === 'ready' && latestJob.clips.length > 0"
         class="mt-6 rounded-2xl border border-line bg-bg-panel/60 p-6"
       >
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-base font-semibold text-white">Авто-публікація на YouTube Shorts</h3>
-          <span class="text-xs text-neutral-500">{{ latestJob.clips.length }} кліпів</span>
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="text-base font-semibold text-white">Виберіть кліпи для завантаження</h3>
+          <span class="text-xs text-neutral-500">Обрано {{ selected.size }}</span>
         </div>
-        <p class="mb-5 text-xs text-neutral-500">
-          Перший кліп публікується одразу, наступні — з інтервалом 30 хвилин.
-          Можете закрити вкладку — все відбувається на сервері.
-        </p>
 
         <ul class="space-y-2">
           <li v-for="clip in latestJob.clips" :key="clip.clipId">
-            <div
-              class="flex items-start gap-3 rounded-lg border border-line bg-bg-elevated px-4 py-3"
+            <label
+              :class="[
+                'flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition',
+                selected.has(clip.clipId)
+                  ? 'border-accent bg-accent/10'
+                  : 'border-line bg-bg-elevated hover:border-neutral-600',
+              ]"
             >
+              <input
+                type="checkbox"
+                :checked="selected.has(clip.clipId)"
+                class="mt-1 h-4 w-4 cursor-pointer accent-accent"
+                @change="toggleClip(clip.clipId)"
+              />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-neutral-100">{{ clip.title }}</p>
                 <p class="mt-1 text-xs text-neutral-500">
@@ -622,7 +635,7 @@ function scoreColor(score: number) {
                   type="button"
                   class="rounded-full border border-line bg-bg-base px-2.5 py-1 text-xs font-medium text-neutral-300 transition hover:border-accent hover:text-white"
                   title="Переглянути кліп"
-                  @click="openPreview(clip)"
+                  @click.prevent.stop="openPreview(clip)"
                 >
                   ▶ Превью
                 </button>
@@ -651,27 +664,41 @@ function scoreColor(score: number) {
                   помилка
                 </span>
                 <span
-                  v-else-if="uploadForClip(clip.clipId)?.status === 'uploading'"
-                  class="rounded-full bg-accent/20 px-2.5 py-1 text-xs font-medium text-accent-glow"
+                  v-else-if="uploadForClip(clip.clipId)"
+                  class="rounded-full bg-neutral-800 px-2.5 py-1 text-xs font-medium text-neutral-300"
                 >
                   вантажу…
                 </span>
-                <span
-                  v-else-if="uploadForClip(clip.clipId)?.status === 'scheduled'"
-                  class="rounded-full bg-neutral-800 px-2.5 py-1 text-xs font-medium text-neutral-400"
-                >
-                  {{ untilScheduled(uploadForClip(clip.clipId)!.scheduledAt) }}
-                </span>
-                <span
-                  v-else
-                  class="rounded-full bg-neutral-800/50 px-2.5 py-1 text-xs font-medium text-neutral-500"
-                >
-                  у черзі
-                </span>
               </div>
-            </div>
+            </label>
           </li>
         </ul>
+
+        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label class="text-sm text-neutral-400">
+            Приватність:
+            <select
+              v-model="privacy"
+              class="ml-1 rounded border border-line bg-bg-elevated px-2 py-1 text-neutral-200 outline-none"
+            >
+              <option value="private">private</option>
+              <option value="unlisted">unlisted</option>
+              <option value="public">public</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            :disabled="uploading || selected.size === 0"
+            class="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent/30 transition enabled:hover:bg-accent-glow disabled:cursor-not-allowed disabled:opacity-50"
+            @click="onUpload"
+          >
+            {{
+              uploading
+                ? 'Публікуємо Shorts…'
+                : `Опублікувати як Shorts (${selected.size})`
+            }}
+          </button>
+        </div>
 
         <p
           v-if="youtube.channelId === 'demo-channel-id'"
@@ -681,6 +708,13 @@ function scoreColor(score: number) {
           на справжній канал не летять. Додайте GOOGLE_CLIENT_ID та
           GOOGLE_CLIENT_SECRET у Vercel env vars щоб увімкнути реальну
           публікацію.
+        </p>
+
+        <p
+          v-if="uploadError"
+          class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+        >
+          {{ uploadError }}
         </p>
       </section>
     </div>

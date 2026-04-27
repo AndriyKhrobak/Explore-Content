@@ -69,7 +69,6 @@ model Upload {
   job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   clipId          String
   status          String
-  scheduledAt     DateTime?
   youtubeVideoId  String?
   youtubeUrl      String?
   error           String?
@@ -78,5 +77,4 @@ model Upload {
 
   @@index([projectId])
   @@index([jobId])
-  @@index([status, scheduledAt])
 }
