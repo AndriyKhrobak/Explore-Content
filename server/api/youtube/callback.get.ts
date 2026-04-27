@@ -18,7 +18,15 @@ export default defineEventHandler(async (event) => {
 
   try {
     const origin = getRequestURL(event).origin;
-    const tokens = await exchangeCode(origin, code);
+    const creds = await getProjectOAuthCreds(state);
+    if (!creds) {
+      return sendRedirect(
+        event,
+        `/project/${state}?error=${encodeURIComponent('credentials_required')}`,
+        302,
+      );
+    }
+    const tokens = await exchangeCode(origin, code, creds);
     await prisma.youTubeConnection.upsert({
       where: { projectId: state },
       create: {

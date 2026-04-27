@@ -39,6 +39,11 @@ type Project = {
     channelId?: string | null;
     channelThumbnailUrl?: string | null;
   };
+  googleCredentials: {
+    hasProjectCreds: boolean;
+    hasEnvFallback: boolean;
+    clientIdMasked: string | null;
+  };
   jobs: Job[];
   uploads: Upload[];
 };
@@ -62,6 +67,10 @@ const latestJob = computed<Job | null>(() => {
 
 const uploads = computed<Upload[]>(() => project.value?.uploads ?? []);
 const youtube = computed(() => project.value!.youtube);
+const googleCredentials = computed(() => project.value!.googleCredentials);
+const canConnectYoutube = computed(
+  () => googleCredentials.value.hasProjectCreds || googleCredentials.value.hasEnvFallback,
+);
 
 const connectedFlash = computed(() => route.query.connected as string | undefined);
 const oauthError = computed(() => route.query.error as string | undefined);
@@ -397,7 +406,20 @@ function scoreColor(score: number) {
         Помилка OAuth: {{ oauthError }}
       </div>
 
-      <!-- Step 1: Platforms -->
+      <!-- Step 1a: Google OAuth credentials (BYO Client) -->
+      <GoogleCredentialsCard
+        v-if="!youtube.connected"
+        class="mb-3"
+        :project-id="project!.id"
+        :has-project-creds="googleCredentials.hasProjectCreds"
+        :has-env-fallback="googleCredentials.hasEnvFallback"
+        :client-id-masked="googleCredentials.clientIdMasked"
+        :has-you-tube-connection="youtube.connected"
+        @saved="refresh"
+        @removed="refresh"
+      />
+
+      <!-- Step 1b: Platforms -->
       <div class="space-y-3">
         <PlatformCard
           platform="youtube"
@@ -405,11 +427,17 @@ function scoreColor(score: number) {
           :channel-title="youtube.channelTitle"
           :channel-url="youtube.channelId ? `https://www.youtube.com/channel/${youtube.channelId}` : null"
           :connect-href="`/api/youtube/connect?projectId=${project!.id}`"
-          :disabled="disconnecting"
+          :disabled="disconnecting || !canConnectYoutube"
           @disconnect="onDisconnect"
         />
         <PlatformCard platform="tiktok" :connected="false" coming-soon />
       </div>
+      <p
+        v-if="!youtube.connected && !canConnectYoutube"
+        class="mt-3 text-xs text-neutral-500"
+      >
+        Спершу збережіть Google OAuth Client ID + Secret вище.
+      </p>
       <p
         v-if="disconnectError"
         class="mt-4 rounded-lg border border-red-900/50 bg-red-950/50 px-4 py-3 text-sm text-red-300"

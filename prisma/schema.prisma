@@ -10,13 +10,24 @@ datasource db {
 }
 
 model Project {
-  id         String              @id @default(cuid())
-  name       String
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  youtube    YouTubeConnection?
-  jobs       Job[]
-  uploads    Upload[]
+  id                String                    @id @default(cuid())
+  name              String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  youtube           YouTubeConnection?
+  googleCredentials GoogleClientCredentials?
+  jobs              Job[]
+  uploads           Upload[]
+}
+
+model GoogleClientCredentials {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientId     String
+  clientSecret String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model YouTubeConnection {

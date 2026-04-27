@@ -9,8 +9,9 @@ export default defineEventHandler(async (event) => {
   if (!project) throw createError({ statusCode: 404, statusMessage: 'Project not found' });
 
   const origin = getRequestURL(event).origin;
+  const creds = await getProjectOAuthCreds(projectId);
 
-  if (!isOAuthConfigured()) {
+  if (!creds) {
     if (isDemoConnectEnabled()) {
       await prisma.youTubeConnection.upsert({
         where: { projectId },
@@ -28,12 +29,12 @@ export default defineEventHandler(async (event) => {
       });
       return sendRedirect(event, `/project/${projectId}?connected=demo`, 302);
     }
-    throw createError({
-      statusCode: 500,
-      statusMessage:
-        'Google OAuth not configured (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)',
-    });
+    return sendRedirect(
+      event,
+      `/project/${projectId}?error=${encodeURIComponent('credentials_required')}`,
+      302,
+    );
   }
 
-  return sendRedirect(event, buildAuthUrl(origin, projectId), 302);
+  return sendRedirect(event, buildAuthUrl(origin, projectId, creds), 302);
 });

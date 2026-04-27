@@ -51,6 +51,14 @@ export default defineEventHandler(async (event) => {
   const isDemoConnection = project.youtube.accessToken === 'demo-access-token';
   const shouldSimulate = job.mock || isDemoConnection;
 
+  const creds = shouldSimulate ? null : await getProjectOAuthCreds(projectId);
+  if (!shouldSimulate && !creds) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Google OAuth credentials missing for this project',
+    });
+  }
+
   console.log('[clip.upload] job:', jobId, 'clips:', selected.length, 'mode:', shouldSimulate ? 'SIMULATE' : 'REAL');
 
   for (const clip of selected) {
@@ -86,6 +94,7 @@ export default defineEventHandler(async (event) => {
       console.log('[clip.upload] real upload:', clip.clipId, clip.videoUrl);
       const { videoId, url } = await uploadVideoToYouTube({
         connection: project.youtube,
+        creds: creds!,
         clipUrl: clip.videoUrl,
         title: clip.title,
         description: [
