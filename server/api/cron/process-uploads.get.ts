@@ -87,8 +87,22 @@ export default defineEventHandler(async (event) => {
         continue;
       }
 
+      const creds = await getProjectOAuthCreds(upload.projectId);
+      if (!creds) {
+        await prisma.upload.update({
+          where: { id: upload.id },
+          data: {
+            status: 'failed',
+            error: 'Google OAuth credentials missing for this project',
+          },
+        });
+        results.push({ id: upload.id, ok: false, reason: 'no_creds' });
+        continue;
+      }
+
       const { videoId, url } = await uploadVideoToYouTube({
         connection: upload.project.youtube,
+        creds,
         clipUrl: clip.videoUrl,
         title: clip.title,
         description: [
